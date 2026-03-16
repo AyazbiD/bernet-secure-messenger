@@ -17,6 +17,7 @@ Bernet is a secure web messenger with end-to-end encryption. Built on a End-to-E
 
 ## Architecture
 
+```text
 ------------------------------------------------------------------
               CLIENT (Browser)                    
                                                  
@@ -39,6 +40,7 @@ Bernet is a secure web messenger with end-to-end encryption. Built on a End-to-E
   security.py (SHA-256 hashing)                   
   crypto_engine.py (RSA + AES-GCM)               
 ------------------------------------------------------------------
+```
 
 ## How Encryption Works
 
