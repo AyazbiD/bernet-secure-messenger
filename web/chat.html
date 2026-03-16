@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Bernet Secure Messenger — чаты">
+    <title>Bernet Messenger</title>
+    <link rel="stylesheet" href="/web/css/style.css?v=11">
+    <link rel="icon" href="/web/assets/logo.png" type="image/png">
+</head>
+
+<body>
+    <div class="app-layout">
+        <!-- ═══════════════ SIDEBAR ═══════════════ -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" data-i18n="search_placeholder"
+                        placeholder="Поиск пользователей..." autocomplete="new-password">
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+            </div>
+
+            <div class="chat-list" id="chatList">
+                <div class="loading-messages">
+                    <div class="spinner spinner-accent"></div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="chat-avatar sm clickable" id="currentUserAvatar">?</div>
+                <span class="user-name clickable" id="currentUserName">...</span>
+                <button class="btn-icon" id="settingsBtn" data-i18n-title="settings_tooltip"
+                    title="Настройки безопасности">🔐</button>
+                <button class="btn-icon" id="logoutBtn" data-i18n-title="logout_tooltip" title="Выйти"
+                    style="color:var(--error);">🚪</button>
+            </div>
+        </aside>
+
+        <!-- ═══════════════ CHAT AREA ═══════════════ -->
+        <main class="chat-area">
+            <!-- Welcome Screen -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <img src="/web/assets/logo.png" alt="Bernet" onerror="this.style.display='none'">
+                <h2 data-i18n="welcome_title">Bernet Messenger</h2>
+                <p data-i18n="welcome_text">Выберите чат или найдите пользователя</p>
+            </div>
+
+            <!-- Chat View -->
+            <div id="chatView" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+                <!-- Chat Header -->
+                <div class="chat-header">
+                    <button class="btn-icon mobile-back" id="mobileBackBtn">←</button>
+                    <div class="chat-avatar clickable" id="chatHeaderAvatar">?</div>
+                    <div class="chat-header-info clickable" id="chatHeaderName">
+                        <div class="name">—</div>
+                        <div class="status" id="chatHeaderStatus"></div>
+                    </div>
+                    <button class="btn-icon" id="chatMenuBtn" data-i18n-title="menu_tooltip" title="Меню">⋮</button>
+                </div>
+
+                <!-- Chat Context Menu -->
+                <div class="context-menu" id="chatContextMenu">
+                    <div class="context-item" onclick="Chat.openOtherProfile()"><span data-i18n="ctx_profile">👤
+                            Профиль</span></div>
+                    <div class="context-item" onclick="Chat.clearChat(Chat.currentChat?.id)"><span
+                            data-i18n="ctx_clear_chat">🗑️ Очистить чат</span></div>
+                    <div class="context-item danger" onclick="Chat.toggleBlock(Chat.currentChat?.id, false)"><span
+                            data-i18n="ctx_block">🚫
+                            Заблокировать</span></div>
+                </div>
+
+                <!-- Messages -->
+                <div class="messages-container" id="messagesContainer"></div>
+
+                <!-- Input Area -->
+                <div class="input-area">
+                    <div id="pendingAttachments" class="pending-attachments hidden"></div>
+                    <div class="input-row">
+                        <input type="file" id="fileInput" hidden multiple onchange="Chat.handleFileSelect(this)">
+                        <button class="btn-icon" onclick="document.getElementById('fileInput').click()"
+                            data-i18n-title="attach_tooltip" title="Прикрепить файл">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path
+                                    d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48">
+                                </path>
+                            </svg>
+                        </button>
+                        <textarea id="messageInput" data-i18n="type_message" placeholder="Напишите сообщение..."
+                            rows="1"></textarea>
+                        <button class="send-btn" id="sendBtn" data-i18n-title="send_tooltip" title="Отправить">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ═══════════════ MY PROFILE MODAL (sidebar avatar click) ═══════════════ -->
+    <div class="modal-overlay hidden" id="profileModal">
+        <div class="modal modal-profile animate-scale">
+            <div class="modal-header">
+                <h2 data-i18n="my_profile">Мой профиль</h2>
+                <button class="btn-icon"
+                    onclick="document.getElementById('profileModal').classList.add('hidden')">✕</button>
+            </div>
+
+            <div class="profile-card">
+                <div class="avatar-upload-wrapper" onclick="Chat.uploadAvatar()">
+                    <div class="chat-avatar lg" id="profileAvatar"
+                        onclick="event.stopPropagation(); Chat.viewAvatar(this)">?</div>
+                    <div class="avatar-overlay">📷</div>
+                </div>
+                <div class="profile-main">
+                    <div class="profile-name" id="profileName">—</div>
+                    <div class="profile-sub" id="profileUsername">@—</div>
+                </div>
+            </div>
+
+            <!-- Tabs: Edit Profile | Blocked -->
+            <div class="profile-tabs">
+                <button class="tab active" onclick="Chat.switchProfileTab(this, 'tabProfileEdit')">✏️
+                    <span data-i18n="edit_profile">Редактировать</span></button>
+                <button class="tab" onclick="Chat.switchProfileTab(this, 'tabBlocked')">🚫 <span
+                        data-i18n="blocked_list">Блокировки</span></button>
+            </div>
+
+            <!-- Tab: Edit Profile -->
+            <div class="tab-content" id="tabProfileEdit">
+                <div class="input-group">
+                    <label data-i18n="first_name">Имя *</label>
+                    <input type="text" id="editFirstName" data-i18n="auth_firstname_placeholder" placeholder="Ваше имя">
+                </div>
+                <div class="input-group">
+                    <label data-i18n="last_name">Фамилия</label>
+                    <input type="text" id="editLastName" data-i18n="auth_lastname_placeholder"
+                        placeholder="Ваша фамилия">
+                </div>
+                <div class="input-group">
+                    <label data-i18n="phone">Телефон</label>
+                    <input type="text" id="editPhone" placeholder="+7 (___) ___-__-__">
+                </div>
+                <div class="input-group">
+                    <label data-i18n="birth_date">Дата рождения</label>
+                    <input type="date" id="editBirth">
+                </div>
+                <div class="input-group">
+                    <label data-i18n="about_label">О себе</label>
+                    <textarea id="editAbout" data-i18n="about_me" placeholder="Расскажите о себе..." rows="3"
+                        style="resize:vertical"></textarea>
+                </div>
+                <button class="btn btn-primary" onclick="Chat.saveProfile()">💾 <span
+                        data-i18n="save">Сохранить</span></button>
+            </div>
+
+            <!-- Tab: Blocked Users -->
+            <div class="tab-content hidden" id="tabBlocked">
+                <div id="blockedList">
+                    <p class="text-muted text-sm">Загрузка...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ OTHER USER PROFILE MODAL (chat header click) ═══════════════ -->
+    <div class="modal-overlay hidden" id="otherProfileModal">
+        <div class="modal modal-profile animate-scale">
+            <div class="modal-header">
+                <h2 data-i18n="user_profile">Профиль</h2>
+                <button class="btn-icon"
+                    onclick="document.getElementById('otherProfileModal').classList.add('hidden')">✕</button>
+            </div>
+
+            <div class="profile-card">
+                <div class="chat-avatar lg clickable" id="otherProfileAvatar" onclick="Chat.viewAvatar(this)">?</div>
+                <div class="profile-main">
+                    <div class="profile-name" id="otherProfileName">—</div>
+                    <div class="profile-sub" id="otherProfileUsername">@—</div>
+                    <div class="profile-status" id="otherProfileStatus"></div>
+                </div>
+            </div>
+
+            <div class="profile-info">
+                <div class="info-row"><span class="info-label" data-i18n="phone_label">📱 Телефон</span><span
+                        id="otherProfilePhone">—</span>
+                </div>
+                <div class="info-row"><span class="info-label" data-i18n="birth_label">🎂 Дата рождения</span><span
+                        id="otherProfileBirth">—</span></div>
+                <div class="info-row"><span class="info-label" data-i18n="about_info_label">📝 О себе</span><span
+                        id="otherProfileAbout">—</span>
+                </div>
+            </div>
+
+            <div class="profile-actions">
+                <button class="btn btn-primary" id="otherProfileWriteBtn">✉️ <span
+                        data-i18n="send_message">Написать</span></button>
+                <button class="btn btn-outline" id="otherProfileBlockBtn">🚫 <span
+                        data-i18n="block_user">Заблокировать</span></button>
+                <button class="btn btn-outline danger" id="otherProfileClearBtn">🗑️ <span
+                        data-i18n="ctx_clear_chat">Очистить чат</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ SETTINGS MODAL ═══════════════ -->
+    <div class="modal-overlay hidden" id="settingsModal">
+        <div class="modal modal-settings animate-scale">
+            <div class="modal-header">
+                <h2>⚙️ <span data-i18n="settings_title">Настройки</span></h2>
+                <button class="btn-icon"
+                    onclick="document.getElementById('settingsModal').classList.add('hidden')">✕</button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="settings-tabs">
+                <button class="tab active" id="btnTabAppearance">🎨 <span
+                        data-i18n="appearance_tab">Оформление</span></button>
+                <button class="tab" id="btnTabPassword">🔐 <span data-i18n="password_tab">Пароль</span></button>
+                <button class="tab" id="btnTabPrivacy">🛡️ <span
+                        data-i18n="privacy_tab">Конфиденциальность</span></button>
+            </div>
+
+            <!-- Tab: Appearance -->
+            <div class="tab-content" id="tabAppearance">
+                <div class="settings-section">
+                    <h3 class="settings-section-title" data-i18n="theme">Тема</h3>
+                    <div class="theme-toggle-group">
+                        <button class="theme-btn active" id="btnThemeDark" onclick="Chat.setTheme('dark')">
+                            🌙 <span data-i18n="theme_dark">Тёмная</span>
+                        </button>
+                        <button class="theme-btn" id="btnThemeLight" onclick="Chat.setTheme('light')">
+                            ☀️ <span data-i18n="theme_light">Светлая</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3 class="settings-section-title" data-i18n="language">Язык</h3>
+                    <div class="lang-toggle-group">
+                        <button class="lang-btn" id="btnLangRu" onclick="Chat.setLanguage('ru')">
+                            🇷🇺 Русский
+                        </button>
+                        <button class="lang-btn" id="btnLangKz" onclick="Chat.setLanguage('kz')">
+                            🇰🇿 Қазақша
+                        </button>
+                        <button class="lang-btn" id="btnLangEn" onclick="Chat.setLanguage('en')">
+                            🇬🇧 English
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Password -->
+            <div class="tab-content hidden" id="tabPassword">
+                <div class="input-group">
+                    <label data-i18n="old_password">Старый пароль</label>
+                    <input type="password" id="oldPassword" data-i18n="old_password_placeholder"
+                        placeholder="Текущий пароль">
+                </div>
+                <div class="input-group">
+                    <label data-i18n="new_password">Новый пароль</label>
+                    <input type="password" id="newPassword" data-i18n="new_password_placeholder"
+                        placeholder="Минимум 4 символа">
+                </div>
+                <button class="btn btn-primary" onclick="Chat.changePassword()">🔐 <span
+                        data-i18n="change_password_btn">Сменить пароль</span></button>
+            </div>
+
+            <!-- Tab: Privacy / Keys -->
+            <div class="tab-content hidden" id="tabPrivacy">
+                <div class="key-status-card" id="keyStatusCard">
+                    <div class="key-status-header">
+                        <span class="key-icon" id="keyStatusIcon">🔑</span>
+                        <div>
+                            <div class="key-status-title" id="keyStatusTitle" data-i18n="encryption_keys">Ключи
+                                шифрования</div>
+                            <div class="key-status-sub" id="keyStatusSub" data-i18n="checking">Проверка...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="key-info-section">
+                    <label class="key-label" data-i18n="key_fingerprint">Отпечаток публичного ключа</label>
+                    <div class="key-fingerprint" id="keyFingerprint">—</div>
+                </div>
+
+                <div class="key-info-section">
+                    <label class="key-label" data-i18n="public_key_pem">Публичный ключ (PEM)</label>
+                    <textarea class="key-pem-display" id="keyPublicPem" readonly rows="4" data-i18n="no_key"
+                        placeholder="Нет ключа"></textarea>
+                    <button class="btn btn-sm btn-outline" onclick="Chat.copyPublicKey()" style="margin-top:8px;">📋
+                        <span data-i18n="copy_btn">Копировать</span></button>
+                </div>
+
+                <div class="key-info-section">
+                    <label class="key-label" data-i18n="private_key">Приватный ключ</label>
+                    <div class="key-private-status" id="keyPrivateStatus">—</div>
+                </div>
+
+                <div class="key-actions">
+                    <button class="btn btn-primary" onclick="Chat.regenerateKeys()">🔄 <span
+                            data-i18n="regen_keys_btn">Обновить ключи</span></button>
+                    <p class="key-warning" data-i18n="regen_warning">⚠️ При обновлении старые зашифрованные сообщения
+                        станут нечитаемыми</p>
+                </div>
+            </div>
+
+            <div class="settings-footer">
+                <button class="btn btn-outline danger" onclick="Chat.logout()">🚪 <span data-i18n="logout_btn">Выйти из
+                        аккаунта</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ FULLSCREEN IMAGE VIEWER ═══════════════ -->
+    <div class="modal-overlay hidden" id="imageViewerModal" onclick="this.classList.add('hidden')">
+        <div class="modal-image-viewer" onclick="event.stopPropagation()">
+            <img id="imageViewerImg" src="" alt="">
+            <div class="viewer-controls">
+                <button class="btn-icon viewer-btn" id="viewerDownloadBtn" onclick="Chat.downloadViewerImage()"
+                    data-i18n-title="download_tooltip" title="Скачать">⬇️</button>
+                <button class="btn-icon viewer-btn"
+                    onclick="document.getElementById('imageViewerModal').classList.add('hidden')"
+                    data-i18n-title="close_tooltip" title="Закрыть">✕</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/web/js/i18n.js?v=21"></script>
+    <script src="/web/js/api.js?v=21"></script>
+    <script src="/web/js/ws.js?v=21"></script>
+    <script src="/web/js/crypto.js?v=21"></script>
+    <script src="/web/js/chat.js?v=21"></script>
+    <script src="/web/js/app.js?v=21"></script>
+</body>
+
+</html>

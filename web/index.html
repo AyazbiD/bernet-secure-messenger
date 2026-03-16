@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Bernet Secure Messenger — безопасный мессенджер с шифрованием">
+  <title>Bernet Messenger — Вход</title>
+  <link rel="stylesheet" href="/web/css/style.css?v=10">
+  <link rel="icon" href="/web/assets/logo.png" type="image/png">
+</head>
+
+<body>
+  <!-- Theme/Language switcher (top-right corner) -->
+  <div class="auth-settings">
+    <div class="auth-settings-row">
+      <button class="auth-toggle-btn" id="authThemeToggle" onclick="toggleAuthTheme()" title="Тема">🌙</button>
+      <div class="auth-lang-group">
+        <button class="auth-lang-btn active" id="authLangRu" onclick="setAuthLang('ru')">RU</button>
+        <button class="auth-lang-btn" id="authLangKz" onclick="setAuthLang('kz')">KZ</button>
+        <button class="auth-lang-btn" id="authLangEn" onclick="setAuthLang('en')">EN</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="auth-page">
+    <!-- ── LOGIN FORM ── -->
+    <div class="auth-card" id="loginForm">
+      <div class="auth-logo">
+        <img src="/web/assets/logo.png" alt="Bernet" onerror="this.style.display='none'">
+        <h1>Bernet</h1>
+        <p data-i18n="auth_subtitle">Безопасный мессенджер</p>
+      </div>
+
+      <div class="auth-error" id="loginError"></div>
+
+      <div class="input-group">
+        <label for="loginUsername" data-i18n="auth_login">Логин</label>
+        <input type="text" id="loginUsername" data-i18n="auth_login_placeholder" placeholder="Введите имя пользователя"
+          autocomplete="username" autofocus>
+      </div>
+
+      <div class="input-group">
+        <label for="loginPassword" data-i18n="auth_password">Пароль</label>
+        <input type="password" id="loginPassword" data-i18n="auth_password_placeholder" placeholder="Введите пароль"
+          autocomplete="current-password">
+      </div>
+
+      <div class="mt-16">
+        <button class="btn btn-primary" id="loginSubmit" data-i18n="auth_login_btn">Войти</button>
+      </div>
+
+      <div class="auth-footer">
+        <span data-i18n="auth_no_account">Нет аккаунта?</span> <a id="showRegister" data-i18n="auth_create">Создать</a>
+      </div>
+    </div>
+
+    <!-- ── REGISTER FORM ── -->
+    <div class="auth-card hidden" id="registerForm">
+      <div class="auth-logo">
+        <img src="/web/assets/logo.png" alt="Bernet" onerror="this.style.display='none'">
+        <h1 data-i18n="auth_register_title">Регистрация</h1>
+        <p data-i18n="auth_register_subtitle">Создайте аккаунт в Bernet</p>
+      </div>
+
+      <div class="auth-error" id="registerError"></div>
+
+      <div class="input-group">
+        <label for="regUsername" data-i18n="auth_login_label">Логин *</label>
+        <input type="text" id="regUsername" data-i18n="auth_create_login_placeholder" placeholder="Придумайте логин"
+          autocomplete="username">
+      </div>
+
+      <div class="input-group">
+        <label for="regPassword" data-i18n="auth_password_label">Пароль *</label>
+        <input type="password" id="regPassword" data-i18n="auth_password_min" placeholder="Минимум 4 символа"
+          autocomplete="new-password">
+      </div>
+
+      <div class="input-group">
+        <label for="regFirstName" data-i18n="auth_firstname">Имя *</label>
+        <input type="text" id="regFirstName" data-i18n="auth_firstname_placeholder" placeholder="Ваше имя">
+      </div>
+
+      <div class="input-group">
+        <label for="regLastName" data-i18n="auth_lastname">Фамилия</label>
+        <input type="text" id="regLastName" data-i18n="auth_lastname_placeholder"
+          placeholder="Ваша фамилия (необязательно)">
+      </div>
+
+      <div class="mt-16">
+        <button class="btn btn-primary" id="registerSubmit" data-i18n="auth_register_btn">Создать аккаунт</button>
+      </div>
+
+      <div class="auth-footer">
+        <span data-i18n="auth_has_account">Уже есть аккаунт?</span> <a id="showLogin" data-i18n="auth_signin">Войти</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/web/js/i18n.js?v=10"></script>
+  <script src="/web/js/api.js?v=10"></script>
+  <script src="/web/js/app.js?v=10"></script>
+  <script>
+    // Add auth-specific translations
+    const authTranslations = {
+      ru: {
+        auth_subtitle: 'Безопасный мессенджер',
+        auth_login: 'Логин', auth_login_placeholder: 'Введите имя пользователя',
+        auth_password: 'Пароль', auth_password_placeholder: 'Введите пароль',
+        auth_login_btn: 'Войти',
+        auth_no_account: 'Нет аккаунта?', auth_create: 'Создать',
+        auth_register_title: 'Регистрация', auth_register_subtitle: 'Создайте аккаунт в Bernet',
+        auth_login_label: 'Логин *', auth_create_login_placeholder: 'Придумайте логин',
+        auth_password_label: 'Пароль *', auth_password_min: 'Минимум 4 символа',
+        auth_firstname: 'Имя *', auth_firstname_placeholder: 'Ваше имя',
+        auth_lastname: 'Фамилия', auth_lastname_placeholder: 'Ваша фамилия (необязательно)',
+        auth_register_btn: 'Создать аккаунт',
+        auth_has_account: 'Уже есть аккаунт?', auth_signin: 'Войти'
+      },
+      kz: {
+        auth_subtitle: 'Қауіпсіз мессенджер',
+        auth_login: 'Логин', auth_login_placeholder: 'Пайдаланушы атын енгізіңіз',
+        auth_password: 'Құпия сөз', auth_password_placeholder: 'Құпия сөзді енгізіңіз',
+        auth_login_btn: 'Кіру',
+        auth_no_account: 'Аккаунт жоқ па?', auth_create: 'Тіркелу',
+        auth_register_title: 'Тіркелу', auth_register_subtitle: 'Bernet-те аккаунт жасаңыз',
+        auth_login_label: 'Логин *', auth_create_login_placeholder: 'Логин ойлап табыңыз',
+        auth_password_label: 'Құпия сөз *', auth_password_min: 'Кемінде 4 таңба',
+        auth_firstname: 'Аты *', auth_firstname_placeholder: 'Сіздің атыңыз',
+        auth_lastname: 'Тегі', auth_lastname_placeholder: 'Сіздің тегіңіз (міндетті емес)',
+        auth_register_btn: 'Аккаунт жасау',
+        auth_has_account: 'Аккаунт бар ма?', auth_signin: 'Кіру'
+      },
+      en: {
+        auth_subtitle: 'Secure Messenger',
+        auth_login: 'Username', auth_login_placeholder: 'Enter username',
+        auth_password: 'Password', auth_password_placeholder: 'Enter password',
+        auth_login_btn: 'Sign in',
+        auth_no_account: 'No account?', auth_create: 'Register',
+        auth_register_title: 'Registration', auth_register_subtitle: 'Create a Bernet account',
+        auth_login_label: 'Username *', auth_create_login_placeholder: 'Choose a username',
+        auth_password_label: 'Password *', auth_password_min: 'Minimum 4 characters',
+        auth_firstname: 'First name *', auth_firstname_placeholder: 'Your first name',
+        auth_lastname: 'Last name', auth_lastname_placeholder: 'Your last name (optional)',
+        auth_register_btn: 'Create account',
+        auth_has_account: 'Already have an account?', auth_signin: 'Sign in'
+      }
+    };
+
+    // Merge auth translations into I18n
+    for (const lang in authTranslations) {
+      Object.assign(I18n.translations[lang], authTranslations[lang]);
+    }
+
+    // Theme toggle
+    function toggleAuthTheme() {
+      const current = document.body.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.body.setAttribute('data-theme', next);
+      localStorage.setItem('bernet_theme', next);
+      document.getElementById('authThemeToggle').textContent = next === 'dark' ? '🌙' : '☀️';
+    }
+
+    // Language setter
+    function setAuthLang(lang) {
+      I18n.setLang(lang);
+      ['ru', 'kz', 'en'].forEach(l => {
+        const btn = document.getElementById('authLang' + l.charAt(0).toUpperCase() + l.slice(1));
+        if (btn) btn.classList.toggle('active', l === lang);
+      });
+    }
+
+    // Apply saved preferences on load
+    document.addEventListener('DOMContentLoaded', () => {
+      const savedTheme = localStorage.getItem('bernet_theme') || 'dark';
+      document.body.setAttribute('data-theme', savedTheme);
+      document.getElementById('authThemeToggle').textContent = savedTheme === 'dark' ? '🌙' : '☀️';
+
+      I18n.init();
+      const lang = I18n.currentLang;
+      ['ru', 'kz', 'en'].forEach(l => {
+        const btn = document.getElementById('authLang' + l.charAt(0).toUpperCase() + l.slice(1));
+        if (btn) btn.classList.toggle('active', l === lang);
+      });
+    });
+  </script>
+</body>
+
+</html>
