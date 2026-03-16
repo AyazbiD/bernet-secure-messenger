@@ -109,14 +109,14 @@ Open http://localhost:8000/web/ in your browser.
 
 ## Project Structure
 
+```text
 bernet-messenger/
-- server.py              # FastAPI server (REST API + WebSocket)
-- database.py            # SQLite operations (40+ functions)
-- crypto_engine.py       # Server-side encryption (RSA + AES-GCM)
-- security.py            # Password hashing (SHA-256)
-- requirements.txt       # Python dependencies
-- .env.example           # Environment variables template
-
+├── server.py              # FastAPI server (REST API + WebSocket)
+├── database.py            # SQLite operations (40+ functions)
+├── crypto_engine.py       # Server-side encryption (RSA + AES-GCM)
+├── security.py            # Password hashing (SHA-256)
+├── requirements.txt       # Python dependencies
+├── .env.example           # Environment variables template
 │
 ├── web/                   # Web Frontend
 │   ├── index.html         # Login / Registration page
@@ -137,10 +137,7 @@ bernet-messenger/
 └── uploads/               # User uploads (gitignored)
     ├── avatars/           # Profile pictures
     └── attachments/       # Encrypted file attachments
-
-## API
-
-Full Swagger docs available at: **http://localhost:8000/docs**
+```
 
 ### Main Endpoints
 
