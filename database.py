@@ -140,6 +140,13 @@ def init_database():
         cursor.execute("ALTER TABLE attachments ADD COLUMN iv TEXT")
     except:
         pass
+        
+    # add self-destruct columns for old databases
+    try:
+        cursor.execute("ALTER TABLE messages ADD COLUMN self_destruct_seconds INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE messages ADD COLUMN read_at TEXT")
+    except:
+        pass
     
     conn.commit()
     conn.close()
@@ -265,7 +272,9 @@ def row_to_message(row):
         "iv": row[8],
         "timestamp": row[9] if row[9] else datetime.now().isoformat(),
         "status": row[10] if len(row) > 10 else "sent",
-        "is_read": bool(row[11]) if len(row) > 11 else False
+        "is_read": bool(row[11]) if len(row) > 11 else False,
+        "self_destruct_seconds": row[13] if len(row) > 13 else 0,
+        "read_at": row[14] if len(row) > 14 else None
     }
 
 # --- user functions ---
@@ -444,7 +453,7 @@ def get_messages_paginated(user1_id: str, user2_id: str, current_user_id: str = 
     return [row_to_message(row) for row in rows]
 
 def add_message(sender_id: int, sender_username: str, recipient_id: int, recipient_username: str, 
-                encrypted_content: str, encrypted_aes_key: str, sender_encrypted_key: str, iv: str, status: str = "sent"):
+                encrypted_content: str, encrypted_aes_key: str, sender_encrypted_key: str, iv: str, status: str = "sent", self_destruct_seconds: int = 0):
     msg_id = str(uuid.uuid4())
     timestamp = datetime.now().isoformat()
     
@@ -453,10 +462,10 @@ def add_message(sender_id: int, sender_username: str, recipient_id: int, recipie
     
     cursor.execute('''
         INSERT INTO messages (id, sender_id, sender_username, recipient_id, recipient_username,
-                            encrypted_content, encrypted_aes_key, sender_encrypted_key, iv, timestamp, status, is_read)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            encrypted_content, encrypted_aes_key, sender_encrypted_key, iv, timestamp, status, is_read, self_destruct_seconds)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (msg_id, sender_id, sender_username, recipient_id, recipient_username, 
-          encrypted_content, encrypted_aes_key, sender_encrypted_key, iv, timestamp, status, 0))
+          encrypted_content, encrypted_aes_key, sender_encrypted_key, iv, timestamp, status, 0, self_destruct_seconds))
     
     conn.commit()
     conn.close()
@@ -473,7 +482,9 @@ def add_message(sender_id: int, sender_username: str, recipient_id: int, recipie
         "iv": iv,
         "timestamp": timestamp,
         "status": status,
-        "is_read": False
+        "is_read": False,
+        "self_destruct_seconds": self_destruct_seconds,
+        "read_at": None
     }
 
 def add_attachment(id: str, from_user_id: int, to_user_id: int,
@@ -568,10 +579,13 @@ def get_unread_count(user_id: str, from_user_id: str) -> int:
 def mark_messages_read(user_id: str, from_user_id: str):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    # set read time if not set yet (needed for self-destruct timer)
     cursor.execute('''
-        UPDATE messages SET is_read = 1, status = 'read'
+        UPDATE messages SET is_read = 1, status = 'read',
+            read_at = CASE WHEN read_at IS NULL THEN ? ELSE read_at END
         WHERE recipient_id = ? AND sender_id = ?
-    ''', (user_id, from_user_id))
+    ''', (now, user_id, from_user_id))
     conn.commit()
     conn.close()
 
@@ -801,6 +815,69 @@ def get_user_online_status(user_id: str) -> dict:
     if row:
         return {"is_online": bool(row[0]), "last_seen": row[1]}
     return {"is_online": False, "last_seen": None}
+
+# --- self destruct messages ---
+
+def get_expired_self_destruct_messages() -> list:
+    # find messages that were read and expired
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, sender_id, recipient_id, self_destruct_seconds, read_at FROM messages 
+        WHERE self_destruct_seconds > 0 AND read_at IS NOT NULL
+    ''')
+    rows = cursor.fetchall()
+    conn.close()
+    
+    expired = []
+    now = datetime.now()
+    for msg_id, sender_id, recipient_id, destruct_secs, read_at in rows:
+        try:
+            read_time = datetime.fromisoformat(read_at)
+            if (now - read_time).total_seconds() >= destruct_secs:
+                expired.append({"id": msg_id, "sender_id": sender_id, "recipient_id": recipient_id})
+        except:
+            pass
+    return expired
+
+def delete_expired_messages():
+    # delete expired self-destruct messages
+    expired = get_expired_self_destruct_messages()
+    if not expired:
+        return []
+    
+    expired_ids = [e["id"] for e in expired]
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    placeholders = ','.join('?' * len(expired_ids))
+    cursor.execute(f'DELETE FROM messages WHERE id IN ({placeholders})', expired_ids)
+    conn.commit()
+    conn.close()
+    if expired:
+        print(f"[DATABASE] Deleted {len(expired)} expired self-destruct messages")
+    return expired
+
+def set_message_read_at(message_id: str, read_at: str = None):
+    # record the time photo was opened
+    if read_at is None:
+        read_at = datetime.now().isoformat()
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE messages SET read_at = ?, is_read = 1, status = 'read'
+        WHERE id = ? AND read_at IS NULL
+    ''', (read_at, message_id))
+    conn.commit()
+    conn.close()
+    return read_at
+
+def get_message_by_id(message_id: str):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM messages WHERE id = ?', (message_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row_to_message(row) if row else None
 
 def update_user_preferences(user_id: str, language: str = None, theme: str = None):
     conn = sqlite3.connect(DB_FILE)

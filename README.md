@@ -2,11 +2,16 @@
 
 Bernet is a secure web messenger with end-to-end encryption. Built on a End-to-End Encrypted architecture — the server never sees your messages, it only stores encrypted data. I made this as my diploma project to learn how real encryption works in practice.
 
+## Latest Update
+
+I added the self-destructing messages feature from the main code. Now we have timers for messages, like in Telegram. The server checks and deletes old messages every two seconds to keep the database clean. I also added real-time profile updates. Now when a user changes their avatar, everyone sees it immediately without refreshing the page. I did not add any unnecessary features, I only kept the important backend code that is needed for the app to work.
+
 ## Features
 
 - 🔒 E2E encryption (RSA-2048 + AES-256-GCM)
 - 💬 Real-time messaging via WebSocket
 - 📎 Encrypted file attachments (photos, documents)
+- ⏱️ Self-destructing messages (timer)
 - ✅ Message statuses (sent / delivered / read)
 - ⌨️ Typing indicator
 - 🟢 Online/offline status with last seen
@@ -138,6 +143,9 @@ bernet-messenger/
     ├── avatars/           # Profile pictures
     └── attachments/       # Encrypted file attachments
 ```
+## API
+
+Full Swagger docs available at: **http://localhost:8000/docs**
 
 ### Main Endpoints
 

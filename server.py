@@ -30,6 +30,7 @@ from database import (
     update_user_preferences, get_user_preferences,
     clear_chat_for_user, delete_all_messages_between,
     add_attachment, get_attachment, update_attachment_message_link, get_attachments_for_message, get_media_between,
+    delete_expired_messages, set_message_read_at, get_message_by_id,
 )
 
 class SendMessageRequest(BaseModel):
@@ -39,6 +40,7 @@ class SendMessageRequest(BaseModel):
     sender_encrypted_key: str = ""
     iv: str = ""
     attachment_ids: list[str] = []
+    self_destruct_seconds: int = 0
 
 # app settings
 app = FastAPI(title="Bernet Messenger API", version="1.0.0")
@@ -204,6 +206,20 @@ class ConnectionManager:
                     except Exception:
                         pass
     
+    async def broadcast_user_update(self, user_id: int, updates: dict):
+        # broadcast profile update to all connections
+        msg = {
+            "type": "user_update",
+            "user_id": user_id,
+            "updates": updates
+        }
+        for connections in self.active_connections.values():
+            for ws in connections:
+                try:
+                    await ws.send_json(msg)
+                except Exception:
+                    pass
+    
     async def broadcast_typing(self, from_user_id: int, to_user_id: int, is_typing: bool):
         typing_msg = {
             "type": "typing",
@@ -283,6 +299,8 @@ async def update_profile(request: UpdateProfileRequest, user=Depends(get_current
     updates = {k: v for k, v in request.dict().items() if v is not None}
     if updates:
         update_user(user["id"], updates)
+        # broadcast to all users to update UI immediately
+        asyncio.create_task(manager.broadcast_user_update(user["id"], updates))
     updated = get_user_by_id(user["id"])
     return {k: v for k, v in updated.items() if k != "password"}
 
@@ -432,7 +450,8 @@ async def send_message(request: SendMessageRequest, user=Depends(get_current_use
         encrypted_aes_key=request.encrypted_aes_key,
         sender_encrypted_key=request.sender_encrypted_key,
         iv=request.iv,
-        status="sent"
+        status="sent",
+        self_destruct_seconds=request.self_destruct_seconds
     )
 
     # link attachments
@@ -548,7 +567,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                             encrypted_aes_key=data.get("encrypted_aes_key", ""),
                             sender_encrypted_key=data.get("sender_encrypted_key", ""),
                             iv=data.get("iv", ""),
-                            status="sent"
+                            status="sent",
+                            self_destruct_seconds=data.get("self_destruct_seconds", 0)
                         )
                         
                         ws_msg = {"type": "new_message", "message": msg}
@@ -567,6 +587,25 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                         "type": "messages_read",
                         "reader_id": user_id
                     })
+            
+            elif msg_type == "reveal_photo":
+                # recipient opened a self-destructing photo
+                message_id = data.get("message_id")
+                if message_id:
+                    msg_info = get_message_by_id(message_id)
+                    if msg_info and msg_info.get("self_destruct_seconds", 0) > 0:
+                        read_at = set_message_read_at(message_id)
+                        expires_at_dt = datetime.fromisoformat(read_at) + timedelta(seconds=msg_info["self_destruct_seconds"])
+                        sd_event = {
+                            "type": "sd_started",
+                            "message_id": message_id,
+                            "self_destruct_seconds": msg_info["self_destruct_seconds"],
+                            "read_at": read_at,
+                            "expires_at": expires_at_dt.isoformat()
+                        }
+                        # notify both users
+                        await manager.send_to_user(int(msg_info["sender_id"]), sd_event)
+                        await manager.send_to_user(int(msg_info["recipient_id"]), sd_event)
     
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
@@ -574,15 +613,34 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         print(f"[WS] Error for user {user_id}: {e}")
         manager.disconnect(websocket, user_id)
 
-# background task - check heartbeats every 30 sec
+# background tasks (heartbeat & self destruct cleaner)
 @app.on_event("startup")
-async def start_heartbeat_monitor():
+async def start_background_tasks():
     async def monitor():
         while True:
             await asyncio.sleep(30)
             await manager.check_heartbeats()
+            
+    async def sd_cleanup_loop():
+        # check for expired messages every 2 seconds
+        while True:
+            await asyncio.sleep(2)
+            try:
+                deleted = delete_expired_messages()
+                if deleted:
+                    for msg_info in deleted:
+                        event = {
+                            "type": "message_deleted",
+                            "message_id": msg_info["id"]
+                        }
+                        await manager.send_to_user(int(msg_info["sender_id"]), event)
+                        await manager.send_to_user(int(msg_info["recipient_id"]), event)
+            except Exception as e:
+                print(f"[SD-CLEANUP] Error: {e}")
+                
     asyncio.create_task(monitor())
-    print("[SERVER] Heartbeat monitor started")
+    asyncio.create_task(sd_cleanup_loop())
+    print("[SERVER] Background tasks started (heartbeat + sd cleaner)")
 
 # server health check
 @app.get("/api/health")
@@ -613,6 +671,10 @@ async def upload_avatar(file: UploadFile = File(...), user=Depends(get_current_u
         shutil.copyfileobj(file.file, f)
     avatar_url = f"/uploads/avatars/{avatar_name}"
     update_user(user["id"], {"avatar": avatar_url})
+    
+    # broadcast to all clients to instantly update UI
+    asyncio.create_task(manager.broadcast_user_update(user["id"], {"avatar": avatar_url}))
+    
     return {"avatar": avatar_url}
 
 @app.get("/uploads/{filepath:path}")
@@ -659,8 +721,8 @@ if __name__ == "__main__":
     import uvicorn
     print("=" * 50)
     print("  Bernet Messenger Server v1.0")
-    print("  http://localhost:8000")
-    print("  Web UI: http://localhost:8000/web/")
-    print("  Docs: http://localhost:8000/docs")
+    print("  http://localhost:8001")
+    print("  Web UI: http://localhost:8001/web/")
+    print("  Docs: http://localhost:8001/docs")
     print("=" * 50)
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")
