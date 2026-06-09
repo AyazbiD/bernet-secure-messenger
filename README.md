@@ -1,24 +1,32 @@
 ## About
 
-Bernet is a secure web messenger with end-to-end encryption. Built on a End-to-End Encrypted architecture — the server never sees your messages, it only stores encrypted data. I made this as my diploma project to learn how real encryption works in practice.
+Bernet is a secure web messenger with strict end-to-end encryption. Built on a zero-knowledge architecture — the server never sees your messages, it only stores encrypted blobs. I developed this as my diploma project to demonstrate how modern, practical encryption (AES-GCM + RSA) functions in real-world applications.
 
-## Latest Update
+## What's new in Version 1.1 (Release)
 
-I added the self-destructing messages feature from the main code. Now we have timers for messages, like in Telegram. The server checks and deletes old messages every two seconds to keep the database clean. I also added real-time profile updates. Now when a user changes their avatar, everyone sees it immediately without refreshing the page. I did not add any unnecessary features, I only kept the important backend code that is needed for the app to work.
+Version 1.1 brings significant structural improvements, professional codebase refactoring, and crucial UX features:
+
+- **Explicit Cryptography Architecture:** Renamed ambiguous database columns to reflect their true cryptographic purpose (`aes_encrypted_content`, `rsa_encrypted_aes_key_recipient`).
+- **Read Receipts:** Added double-tick message indicators to show exactly when your message has been read by the recipient.
+- **Real-Time Typing Indicators:** Added a live typing indicator animation when the other user is typing a message.
+- **Theme Synchronization Fix:** Resolved a critical bug where the `LocalStorage` user snapshot failed to sync with the database when switching between Light and Dark themes.
+- **Self-Destructing Messages:** Added message self-destruction timers for ephemeral messaging.
+- **Professional Docstrings:** Refactored internal code comments into professional Python Docstrings and JSDoc formats for academic and professional review.
+- **UI & Margin Fixes:** Corrected multiple alignment and margin issues across the web interface.
 
 ## Features
 
-- 🔒 E2E encryption (RSA-2048 + AES-256-GCM)
-- 💬 Real-time messaging via WebSocket
-- 📎 Encrypted file attachments (photos, documents)
-- ⏱️ Self-destructing messages (timer)
-- ✅ Message statuses (sent / delivered / read)
-- ⌨️ Typing indicator
-- 🟢 Online/offline status with last seen
-- 🌍 3 languages: Russian, Kazakh, English
-- 🌙 Dark and light theme
-- 👤 User profiles with avatars
-- 🚫 User blocking
+- 🔒 **E2E encryption** (RSA-2048-OAEP + AES-256-GCM)
+- 💬 **Real-time messaging** via WebSocket
+- 📎 **Encrypted file attachments** (photos, documents)
+- ⏱️ **Self-destructing messages** (timer)
+- ✅ **Message statuses** (sent / delivered / read)
+- ⌨️ **Typing indicator**
+- 🟢 **Online/offline status** with last seen
+- 🌍 **3 languages:** Russian, Kazakh, English
+- 🌙 **Dark and light theme**
+- 👤 **User profiles** with avatars
+- 🚫 **User blocking**
 
 ## Architecture
 
@@ -49,16 +57,16 @@ I added the self-destructing messages feature from the main code. Now we have ti
 
 ## How Encryption Works
 
-The project uses hybrid encryption with End-to-End Encrypted principle:
+The project uses hybrid encryption with a strict End-to-End Encrypted (E2EE) principle:
 
-1. Generate a random AES-256 key for each message
-2. Encrypt the message text with AES-256-GCM
-3. Encrypt the AES key with RSA-2048-OAEP-SHA256:
-   - once for the recipient (encrypted_aes_key)
-   - once for the sender (sender_encrypted_key)
-4. Server stores ONLY the encrypted data
+1. Generate a random AES-256 key for each individual message.
+2. Encrypt the message text using AES-256-GCM.
+3. Encrypt the ephemeral AES key using RSA-2048-OAEP-SHA256:
+   - Once using the recipient's public key (`rsa_encrypted_aes_key_recipient`).
+   - Once using the sender's public key (`rsa_encrypted_aes_key_sender`).
+4. The server stores ONLY the resulting ciphertext and encrypted keys.
 
-The private key never leaves the browser — it's stored in localStorage, encrypted with the user's password (PBKDF2, 100,000 iterations).
+The private RSA key never leaves the user's browser — it is generated locally and stored securely in `localStorage`, symmetrically encrypted using the user's PIN (derived via PBKDF2 with 100,000 iterations).
 
 ## Tech Stack
 
@@ -77,8 +85,8 @@ The private key never leaves the browser — it's stored in localStorage, encryp
 ### 1. Clone
 
 ``` bash
-git clone https://github.com/YOUR_USERNAME/bernet-messenger.git
-cd bernet-messenger
+git clone https://github.com/YOUR_USERNAME/bernet-secure-messenger.git
+cd bernet-secure-messenger
 ```
 ### 2. Install dependencies
 
@@ -105,17 +113,13 @@ python server.py
 ```
 Open http://localhost:8000/web/ in your browser.
 
-**Demo accounts:**
-* `admin` / `admin`
-* `test` / `test`
-
 > [!WARNING]
-> **Important Note on E2E Encryption**: When starting with a fresh database, **each user must log in at least once** before they can receive messages. This is because their browser needs to generate and upload their public RSA encryption keys to the server. If you try to send a message to a user who has never logged in, the application will block the message to protect your security, since it has no public key to encrypt the message with.
+> **Important Note on E2E Encryption**: When starting with a fresh database, **each user must log in at least once** before they can receive messages. This allows their browser to generate and upload their public RSA encryption keys to the server. If you attempt to send a message to a user who has never logged in, the application will block the transmission to protect your security, as it lacks a public key to encrypt the payload.
 
 ## Project Structure
 
 ```text
-bernet-messenger/
+bernet-secure-messenger/
 ├── server.py              # FastAPI server (REST API + WebSocket)
 ├── database.py            # SQLite operations (40+ functions)
 ├── crypto_engine.py       # Server-side encryption (RSA + AES-GCM)
@@ -169,4 +173,3 @@ Full Swagger docs available at: **http://localhost:8000/docs**
 | Key theft | Private key encrypted with password (PBKDF2 + AES-GCM) |
 | Replay attack | Unique IV for each message |
 | XSS | Input sanitization (`esc()` function) |
-

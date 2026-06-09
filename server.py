@@ -21,23 +21,24 @@ from jose import jwt, JWTError
 from security import hash_password, check_password
 from database import (
     init_database, insert_default_users,
-    get_all_users, get_user_by_id, get_user_by_username, add_user, update_user,
+    get_all_users, get_user_by_id, get_user_by_username, add_user, update_user, update_user_role,
+    get_admin_users_paginated,
     search_users_with_blocks, get_chat_users,
-    get_messages_between, add_message, get_unread_count, mark_messages_read,
+    get_messages_between, get_messages_paginated, add_message, get_unread_count, mark_messages_read,
     update_message_status, get_last_message_between,
     block_user, unblock_user, get_blocked_users, is_blocked,
     set_user_online, get_user_online_status,
     update_user_preferences, get_user_preferences,
     clear_chat_for_user, delete_all_messages_between,
     add_attachment, get_attachment, update_attachment_message_link, get_attachments_for_message, get_media_between,
-    delete_expired_messages, set_message_read_at, get_message_by_id,
+    delete_expired_messages, set_message_read_at, get_message_by_id, set_user_banned,
 )
 
 class SendMessageRequest(BaseModel):
     recipient_id: int
-    encrypted_content: str
-    encrypted_aes_key: str = ""
-    sender_encrypted_key: str = ""
+    aes_encrypted_content: str
+    rsa_encrypted_aes_key_recipient: str = ""
+    rsa_encrypted_aes_key_sender: str = ""
     iv: str = ""
     attachment_ids: list[str] = []
     self_destruct_seconds: int = 0
@@ -240,6 +241,9 @@ async def login(request: LoginRequest):
     
     if user.get("password") and not check_password(request.password, user["password"]):
         raise HTTPException(status_code=401, detail="Wrong password")
+        
+    if user.get("is_banned"):
+        raise HTTPException(status_code=403, detail="Ваш аккаунт заблокирован администратором")
     
     token = create_access_token(user["id"], user["username"])
     
@@ -325,8 +329,8 @@ ATTACHMENT_DIR.mkdir(parents=True, exist_ok=True)
 async def upload_attachment(
     file: UploadFile = File(...),
     iv: str = Form(...),
-    encrypted_aes_key: str = Form(...),
-    sender_encrypted_key: str = Form(...),
+    rsa_encrypted_aes_key_recipient: str = Form(...),
+    rsa_encrypted_aes_key_sender: str = Form(...),
     to_user_id: int = Form(...),
     original_type: str = Form("application/octet-stream"),
     user=Depends(get_current_user)
@@ -350,8 +354,8 @@ async def upload_attachment(
         file_path=str(file_path),
         file_type=original_type if original_type != "application/octet-stream" else (file.content_type or "application/octet-stream"),
         file_size=file_size,
-        encrypted_aes_key=encrypted_aes_key,
-        sender_encrypted_key=sender_encrypted_key,
+        rsa_encrypted_aes_key_recipient=rsa_encrypted_aes_key_recipient,
+        rsa_encrypted_aes_key_sender=rsa_encrypted_aes_key_sender,
         iv=iv
     )
     
@@ -412,17 +416,19 @@ async def get_chats(user=Depends(get_current_user)):
 # --- messages ---
 
 @app.get("/api/messages/{other_user_id}")
-async def get_messages(other_user_id: int, user=Depends(get_current_user)):
-    messages = get_messages_between(
-        str(user["id"]), str(other_user_id), str(user["id"])
+async def get_messages(other_user_id: int, limit: int = 15, before_id: str = None, user=Depends(get_current_user)):
+    messages = get_messages_paginated(
+        str(user["id"]), str(other_user_id), str(user["id"]), limit, before_id
     )
-    mark_messages_read(str(user["id"]), str(other_user_id))
     
-    # notify sender that messages were read
-    await manager.send_to_user(other_user_id, {
-        "type": "messages_read",
-        "reader_id": user["id"]
-    })
+    if not before_id:
+        mark_messages_read(str(user["id"]), str(other_user_id))
+        
+        # notify sender that messages were read
+        await manager.send_to_user(other_user_id, {
+            "type": "messages_read",
+            "reader_id": user["id"]
+        })
     
     # attach files to messages
     for msg in messages:
@@ -446,9 +452,9 @@ async def send_message(request: SendMessageRequest, user=Depends(get_current_use
         sender_username=user["username"],
         recipient_id=request.recipient_id,
         recipient_username=recipient["username"],
-        encrypted_content=request.encrypted_content,
-        encrypted_aes_key=request.encrypted_aes_key,
-        sender_encrypted_key=request.sender_encrypted_key,
+        aes_encrypted_content=request.aes_encrypted_content,
+        rsa_encrypted_aes_key_recipient=request.rsa_encrypted_aes_key_recipient,
+        rsa_encrypted_aes_key_sender=request.rsa_encrypted_aes_key_sender,
         iv=request.iv,
         status="sent",
         self_destruct_seconds=request.self_destruct_seconds
@@ -563,9 +569,9 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
                             sender_username=user["username"],
                             recipient_id=int(recipient_id),
                             recipient_username=recipient["username"],
-                            encrypted_content=data.get("encrypted_content", ""),
-                            encrypted_aes_key=data.get("encrypted_aes_key", ""),
-                            sender_encrypted_key=data.get("sender_encrypted_key", ""),
+                            aes_encrypted_content=data.get("aes_encrypted_content", ""),
+                            rsa_encrypted_aes_key_recipient=data.get("rsa_encrypted_aes_key_recipient", ""),
+                            rsa_encrypted_aes_key_sender=data.get("rsa_encrypted_aes_key_sender", ""),
                             iv=data.get("iv", ""),
                             status="sent",
                             self_destruct_seconds=data.get("self_destruct_seconds", 0)
@@ -653,6 +659,67 @@ async def health():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+# --- admin ---
+@app.get("/api/admin/users")
+async def get_admin_users(query: str = "", page: int = 1, limit: int = 50, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="У вас нет прав администратора")
+    
+    offset = (page - 1) * limit
+    users, total = get_admin_users_paginated(query, limit, offset)
+    
+    return {
+        "users": [{k: v for k, v in u.items() if k != "password"} for u in users],
+        "total": total
+    }
+
+@app.put("/api/admin/users/{target_user_id}/role")
+async def admin_update_role(target_user_id: int, role: str = Query(...), current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="У вас нет прав администратора")
+    
+    target = get_user_by_id(target_user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if target.get("role") == "super_admin":
+        raise HTTPException(status_code=403, detail="Невозможно изменить роль super_admin")
+        
+    if current_user.get("role") == "admin" and target.get("role") == "admin":
+        raise HTTPException(status_code=403, detail="Администратор не может изменять роль другого администратора")
+        
+    update_user_role(str(target_user_id), role)
+    return {"status": "success"}
+
+@app.post("/api/admin/ban/{target_user_id}")
+async def admin_ban_user(target_user_id: int, action: str = Query("ban"), current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="У вас нет прав администратора")
+    
+    target = get_user_by_id(target_user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if target.get("role") == "super_admin":
+        raise HTTPException(status_code=403, detail="Невозможно забанить super_admin")
+        
+    if current_user.get("role") == "admin" and target.get("role") == "admin":
+        raise HTTPException(status_code=403, detail="Администратор не может забанить другого администратора")
+        
+    set_user_banned(str(target_user_id), action == "ban")
+    
+    # disconnect user if banning
+    if action == "ban" and manager.is_online(target_user_id):
+        if target_user_id in manager.active_connections:
+            for ws in list(manager.active_connections[target_user_id]):
+                try:
+                    await ws.close()
+                except:
+                    pass
+            manager.active_connections.pop(target_user_id, None)
+    
+    return {"status": "ok", "action": action, "user_id": target_user_id}
+
 # avatar upload
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "avatars"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -721,8 +788,8 @@ if __name__ == "__main__":
     import uvicorn
     print("=" * 50)
     print("  Bernet Messenger Server v1.0")
-    print("  http://localhost:8001")
-    print("  Web UI: http://localhost:8001/web/")
-    print("  Docs: http://localhost:8001/docs")
+    print("  http://localhost:8000")
+    print("  Web UI: http://localhost:8000/web/")
+    print("  Docs: http://localhost:8000/docs")
     print("=" * 50)
-    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

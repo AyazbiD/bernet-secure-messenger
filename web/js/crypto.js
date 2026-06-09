@@ -1,5 +1,4 @@
-// e2e encryption with web crypto api
-// rsa-2048 + aes-256-gcm
+// crypto engine - rsa+aes e2e
 const Crypto = {
     _privateKey: null,   // CryptoKey (RSA-OAEP, decrypt)
     _publicKey: null,    // CryptoKey (RSA-OAEP, encrypt) — own
@@ -23,7 +22,7 @@ const Crypto = {
         return arr;
     },
 
-    // pem conversion
+    // pem ↔ arraybuffer converters
     _pemToBuffer(pem) {
         const b64 = pem.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
         return this._fromB64(b64).buffer;
@@ -68,7 +67,7 @@ const Crypto = {
         };
     },
 
-    // save keys to localstorage (encrypted with password)
+    // key storage (localstorage, encrypted with password)
     async saveKeysToStorage(userId, password) {
         // Export private key
         const privBuf = await crypto.subtle.exportKey('pkcs8', this._privateKey);
@@ -169,7 +168,7 @@ const Crypto = {
         await api.updatePublicKey(this._publicKeyPem);
     },
 
-    // import recipient's public key
+    // import recipient's public key (pem string → cryptokey)
     async importPublicKey(pem) {
         const buf = this._pemToBuffer(pem);
         return await crypto.subtle.importKey(
@@ -179,7 +178,7 @@ const Crypto = {
         );
     },
 
-    // key cache
+    // Cache for recipient public keys
     _keyCache: {},
 
     async getRecipientPublicKey(userId) {
@@ -197,7 +196,7 @@ const Crypto = {
         return null;
     },
 
-    // encrypt message (aes + rsa)
+    // encrypt message
     async encryptMessage(plaintext, recipientPublicKey) {
         // 1. Generate ephemeral AES-256 key
         const aesKey = await crypto.subtle.generateKey(
@@ -238,10 +237,10 @@ const Crypto = {
         }
 
         return {
-            encrypted_content: this._toB64(ciphertext),
+            aes_encrypted_content: this._toB64(ciphertext),
             iv: this._toB64(iv),
-            encrypted_aes_key: this._toB64(encryptedAesKey),
-            sender_encrypted_key: senderEncryptedKey
+            rsa_encrypted_aes_key_recipient: this._toB64(encryptedAesKey),
+            rsa_encrypted_aes_key_sender: senderEncryptedKey
         };
     },
 
@@ -283,13 +282,15 @@ const Crypto = {
         }
     },
 
-    // init - call after login
+    // initialize — call after login
     async init(userId, password) {
         // Try loading existing keys
         if (this.hasKeys(userId)) {
             const ok = await this.loadKeysFromStorage(userId, password);
             if (ok) {
                 console.log('[Crypto] Keys loaded from storage');
+                // Make sure server has it (in case DB was reset)
+                await this.uploadPublicKey();
                 return true;
             }
         }
@@ -381,7 +382,27 @@ const Crypto = {
         }
     },
 
-    get isReady() { return this._ready; }
+    get isReady() { return this._ready; },
+
+    // fingerprint (sha-256)
+    async getFingerprint(pemStr) {
+        if (!pemStr) return null;
+        try {
+            const msgUint8 = new TextEncoder().encode(pemStr);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+            const shortHex = hashHex.substring(0, 16);
+            let res = [];
+            for (let i = 0; i < shortHex.length; i += 4) {
+                res.push(shortHex.substring(i, i + 4));
+            }
+            return res.join(':');
+        } catch (e) {
+            console.error('[Crypto] Fingerprint generation failed:', e);
+            return null;
+        }
+    }
 };
 
 window.Crypto = Crypto;

@@ -1,4 +1,4 @@
-# sqlite database
+# database.py - SQLite Backend for Bernet Messenger
 import sqlite3
 import uuid
 import json
@@ -6,14 +6,18 @@ import os
 from datetime import datetime, timedelta
 from security import hash_password
 
+# db file
 DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(DATA_DIR, "bernet.db")
 
-# create tables
+# init db
 def init_database():
-
+    # init db tables
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    
+    # Enable Write-Ahead Logging (WAL) for better concurrency and performance
+    cursor.execute("PRAGMA journal_mode=WAL;")
     
     # Users table
     cursor.execute('''
@@ -39,31 +43,37 @@ def init_database():
         )
     ''')
     
-    # add new columns if missing (for db upgrades)
+    # Add about column if not exists (for existing databases)
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN about TEXT DEFAULT ''")
     except:
         pass  # Column already exists
     
-
+    # Add avatar column if not exists
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN avatar TEXT")
     except:
         pass
     
-
+    # Add language column if not exists
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'ru'")
     except:
         pass
     
-
+    # Add theme column if not exists
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'dark'")
     except:
         pass
+        
+    # Add is_banned column if not exists
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0")
+    except:
+        pass
     
-    # messages table
+    # Messages table - E2E encrypted
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id TEXT PRIMARY KEY,
@@ -71,18 +81,20 @@ def init_database():
             sender_username TEXT,
             recipient_id INTEGER NOT NULL,
             recipient_username TEXT,
-            encrypted_content TEXT,
-            encrypted_aes_key TEXT,
-            sender_encrypted_key TEXT,
+            aes_encrypted_content TEXT,
+            rsa_encrypted_aes_key_recipient TEXT,
+            rsa_encrypted_aes_key_sender TEXT,
             iv TEXT,
             timestamp TEXT,
             status TEXT DEFAULT 'sent',
             is_read INTEGER DEFAULT 0,
-            deleted_for TEXT DEFAULT ''
+            deleted_for TEXT DEFAULT '',
+            self_destruct_seconds INTEGER DEFAULT 0,
+            read_at TEXT
         )
     ''')
     
-    # attachments table
+    # Attachments table for files/photos
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS attachments (
             id TEXT PRIMARY KEY,
@@ -94,13 +106,13 @@ def init_database():
             file_type TEXT,
             file_size INTEGER,
             timestamp TEXT,
-            encrypted_aes_key TEXT,
-            sender_encrypted_key TEXT,
+            rsa_encrypted_aes_key_recipient TEXT,
+            rsa_encrypted_aes_key_sender TEXT,
             iv TEXT
         )
     ''')
     
-    # blocks table
+    # Blocks table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS blocks (
             id TEXT PRIMARY KEY,
@@ -111,7 +123,7 @@ def init_database():
         )
     ''')
     
-
+    # Add new columns if they don't exist
     try:
         cursor.execute("ALTER TABLE messages ADD COLUMN deleted_for TEXT DEFAULT ''")
     except:
@@ -127,23 +139,26 @@ def init_database():
     except:
         pass
 
-
+    # Add attachment encryption columns
     try:
-        cursor.execute("ALTER TABLE attachments ADD COLUMN encrypted_aes_key TEXT")
+        cursor.execute("ALTER TABLE attachments ADD COLUMN rsa_encrypted_aes_key_recipient TEXT")
     except:
         pass
     try:
-        cursor.execute("ALTER TABLE attachments ADD COLUMN sender_encrypted_key TEXT")
+        cursor.execute("ALTER TABLE attachments ADD COLUMN rsa_encrypted_aes_key_sender TEXT")
     except:
         pass
     try:
         cursor.execute("ALTER TABLE attachments ADD COLUMN iv TEXT")
     except:
         pass
-        
-    # add self-destruct columns for old databases
+    
+    # Add self-destruct columns if not exist
     try:
         cursor.execute("ALTER TABLE messages ADD COLUMN self_destruct_seconds INTEGER DEFAULT 0")
+    except:
+        pass
+    try:
         cursor.execute("ALTER TABLE messages ADD COLUMN read_at TEXT")
     except:
         pass
@@ -152,24 +167,21 @@ def init_database():
     conn.close()
 
 def insert_default_users():
-    # create demo users on first launch
+    # insert default users
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # Check if any users exist
-    cursor.execute("SELECT COUNT(*) FROM users")
-    if cursor.fetchone()[0] == 0:
-        # admin password from env variable
-        admin_password = os.environ.get("ADMIN_PASSWORD", "admin")
-        
+    # Check if admin exists
+    cursor.execute("SELECT id FROM users WHERE username = ?", ("admin",))
+    if cursor.fetchone() is None:
         default_users = [
-            ("admin", hash_password(admin_password), "Admin", "User", 
-             "", "", "admin", "red", None, 0, 0,
+            ("admin", hash_password("admin"), "Admin", "User", 
+             "", "", "super_admin", "red", None, 1, 1,
              json.dumps({"language": "ru", "theme": "dark", "hide_personal_data": False}), None),
             
             ("test", hash_password("test"), "Test", "User",
-             "+7 000 000 0000", "2000-01-01", "user", "green", None, 0, 0,
-             json.dumps({"language": "en", "theme": "dark", "hide_personal_data": False}), None),
+             "", "", "user", "blue", None, 1, 0,
+             json.dumps({"language": "ru", "theme": "dark", "hide_personal_data": False}), None),
         ]
         
         cursor.executemany('''
@@ -178,17 +190,18 @@ def insert_default_users():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', default_users)
         
-        print(f"[DATABASE] Default users created (admin / test)")
+        print(f"[DATABASE] Default users created with auto IDs")
     
     conn.commit()
     conn.close()
 
-# init tables and demo users on import
+# Initialize on import
 init_database()
 insert_default_users()
 
-# convert db rows to dicts
+# convert row to dict helper
 def row_to_user(row, columns=None):
+    # convert row to user dict
     if row is None:
         return None
     
@@ -255,9 +268,11 @@ def row_to_user(row, columns=None):
         "about": d.get("about", ""),
         "settings": json.loads(d["settings"]) if d.get("settings") else {},
         "public_key": d.get("public_key"),
+        "is_banned": bool(d.get("is_banned", 0)),
     }
 
 def row_to_message(row):
+    # convert row to message dict
     if row is None:
         return None
     return {
@@ -266,9 +281,9 @@ def row_to_message(row):
         "sender_username": row[2],
         "recipient_id": row[3],
         "recipient_username": row[4],
-        "encrypted_content": row[5],
-        "encrypted_aes_key": row[6],
-        "sender_encrypted_key": row[7],
+        "aes_encrypted_content": row[5],
+        "rsa_encrypted_aes_key_recipient": row[6],
+        "rsa_encrypted_aes_key_sender": row[7],
         "iv": row[8],
         "timestamp": row[9] if row[9] else datetime.now().isoformat(),
         "status": row[10] if len(row) > 10 else "sent",
@@ -277,9 +292,9 @@ def row_to_message(row):
         "read_at": row[14] if len(row) > 14 else None
     }
 
-# --- user functions ---
-
+# user funcs
 def get_all_users():
+    # get all users
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users")
@@ -288,7 +303,32 @@ def get_all_users():
     conn.close()
     return [row_to_user(row, columns) for row in rows]
 
+def get_admin_users_paginated(search_query: str = "", limit: int = 50, offset: int = 0):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    where_clause = ""
+    params = []
+    
+    if search_query:
+        search_term = f"%{search_query}%"
+        where_clause = "WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR CAST(id AS TEXT) LIKE ?"
+        params = [search_term, search_term, search_term, search_term]
+        
+    # Get total count
+    cursor.execute(f"SELECT COUNT(*) FROM users {where_clause}", params)
+    total = cursor.fetchone()[0]
+    
+    # Get paginated users
+    cursor.execute(f"SELECT * FROM users {where_clause} ORDER BY id DESC LIMIT ? OFFSET ?", [*params, limit, offset])
+    columns = [desc[0] for desc in cursor.description]
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [row_to_user(row, columns) for row in rows], total
+
 def get_user_by_id(user_id: str):
+    # find user by id
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -298,6 +338,7 @@ def get_user_by_id(user_id: str):
     return row_to_user(row, columns)
 
 def get_user_by_username(username: str):
+    # find user by username
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (username,))
@@ -307,6 +348,7 @@ def get_user_by_username(username: str):
     return row_to_user(row, columns)
 
 def add_user(user_data: dict):
+    # register new user
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -341,6 +383,7 @@ def add_user(user_data: dict):
     return user_data
 
 def update_user(user_id: str, updates: dict):
+    # update user profile
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -362,6 +405,7 @@ def update_user(user_id: str, updates: dict):
     conn.close()
 
 def search_users(query: str, exclude_id: str = None) -> list:
+    # search by name
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -379,9 +423,16 @@ def search_users(query: str, exclude_id: str = None) -> list:
     conn.close()
     return [row_to_user(row) for row in rows]
 
-# --- messages ---
+def update_user_role(user_id: str, new_role: str):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
+    conn.commit()
+    conn.close()
 
+# msg funcs
 def get_messages_between(user1_id: str, user2_id: str, current_user_id: str = None) -> list:
+    # chat history
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -405,7 +456,7 @@ def get_messages_between(user1_id: str, user2_id: str, current_user_id: str = No
     return [row_to_message(row) for row in rows]
 
 def get_messages_paginated(user1_id: str, user2_id: str, current_user_id: str = None, limit: int = 15, before_id: str = None) -> list:
-    # pagination - get last N messages
+    # load paginated messages
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -453,7 +504,9 @@ def get_messages_paginated(user1_id: str, user2_id: str, current_user_id: str = 
     return [row_to_message(row) for row in rows]
 
 def add_message(sender_id: int, sender_username: str, recipient_id: int, recipient_username: str, 
-                encrypted_content: str, encrypted_aes_key: str, sender_encrypted_key: str, iv: str, status: str = "sent", self_destruct_seconds: int = 0):
+                aes_encrypted_content: str, rsa_encrypted_aes_key_recipient: str, rsa_encrypted_aes_key_sender: str, iv: str, 
+                status: str = "sent", self_destruct_seconds: int = 0):
+    # save message
     msg_id = str(uuid.uuid4())
     timestamp = datetime.now().isoformat()
     
@@ -462,10 +515,12 @@ def add_message(sender_id: int, sender_username: str, recipient_id: int, recipie
     
     cursor.execute('''
         INSERT INTO messages (id, sender_id, sender_username, recipient_id, recipient_username,
-                            encrypted_content, encrypted_aes_key, sender_encrypted_key, iv, timestamp, status, is_read, self_destruct_seconds)
+                            aes_encrypted_content, rsa_encrypted_aes_key_recipient, rsa_encrypted_aes_key_sender, iv, timestamp, status, is_read,
+                            self_destruct_seconds)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (msg_id, sender_id, sender_username, recipient_id, recipient_username, 
-          encrypted_content, encrypted_aes_key, sender_encrypted_key, iv, timestamp, status, 0, self_destruct_seconds))
+          aes_encrypted_content, rsa_encrypted_aes_key_recipient, rsa_encrypted_aes_key_sender, iv, timestamp, status, 0,
+          self_destruct_seconds))
     
     conn.commit()
     conn.close()
@@ -476,9 +531,9 @@ def add_message(sender_id: int, sender_username: str, recipient_id: int, recipie
         "sender_username": sender_username,
         "recipient_id": recipient_id,
         "recipient_username": recipient_username,
-        "encrypted_content": encrypted_content,
-        "encrypted_aes_key": encrypted_aes_key,
-        "sender_encrypted_key": sender_encrypted_key,
+        "aes_encrypted_content": aes_encrypted_content,
+        "rsa_encrypted_aes_key_recipient": rsa_encrypted_aes_key_recipient,
+        "rsa_encrypted_aes_key_sender": rsa_encrypted_aes_key_sender,
         "iv": iv,
         "timestamp": timestamp,
         "status": status,
@@ -489,16 +544,17 @@ def add_message(sender_id: int, sender_username: str, recipient_id: int, recipie
 
 def add_attachment(id: str, from_user_id: int, to_user_id: int,
                   file_name: str, file_path: str, file_type: str, file_size: int,
-                  encrypted_aes_key: str, sender_encrypted_key: str, iv: str):
+                  rsa_encrypted_aes_key_recipient: str, rsa_encrypted_aes_key_sender: str, iv: str):
+    # save attachment
     timestamp = datetime.now().isoformat()
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO attachments (id, from_user_id, to_user_id, file_name, file_path, file_type, file_size, 
-                               encrypted_aes_key, sender_encrypted_key, iv, timestamp)
+                               rsa_encrypted_aes_key_recipient, rsa_encrypted_aes_key_sender, iv, timestamp)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (id, from_user_id, to_user_id, file_name, file_path, file_type, file_size, 
-          encrypted_aes_key, sender_encrypted_key, iv, timestamp))
+          rsa_encrypted_aes_key_recipient, rsa_encrypted_aes_key_sender, iv, timestamp))
     conn.commit()
     conn.close()
     return {
@@ -508,19 +564,20 @@ def add_attachment(id: str, from_user_id: int, to_user_id: int,
         "file_type": file_type,
         "file_size": file_size,
         "timestamp": timestamp,
-        "encrypted_aes_key": encrypted_aes_key,
-        "sender_encrypted_key": sender_encrypted_key,
+        "rsa_encrypted_aes_key_recipient": rsa_encrypted_aes_key_recipient,
+        "rsa_encrypted_aes_key_sender": rsa_encrypted_aes_key_sender,
         "iv": iv,
         "message_id": None
     }
 
 def get_attachment(attachment_id: str):
+    # get file info
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-
+    # Explicit column selection to avoid index errors
     cursor.execute('''
         SELECT id, message_id, from_user_id, to_user_id, file_name, file_path, 
-               file_type, file_size, timestamp, encrypted_aes_key, sender_encrypted_key, iv
+               file_type, file_size, timestamp, rsa_encrypted_aes_key_recipient, rsa_encrypted_aes_key_sender, iv
         FROM attachments WHERE id = ?
     ''', (attachment_id,))
     row = cursor.fetchone()
@@ -537,12 +594,13 @@ def get_attachment(attachment_id: str):
         "file_type": row[6],
         "file_size": row[7],
         "timestamp": row[8],
-        "encrypted_aes_key": row[9],
-        "sender_encrypted_key": row[10],
+        "rsa_encrypted_aes_key_recipient": row[9],
+        "rsa_encrypted_aes_key_sender": row[10],
         "iv": row[11]
     }
 
 def update_attachment_message_link(attachment_id: str, message_id: str):
+    # link file to message
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("UPDATE attachments SET message_id = ? WHERE id = ?", (message_id, attachment_id))
@@ -550,11 +608,12 @@ def update_attachment_message_link(attachment_id: str, message_id: str):
     conn.close()
 
 def get_attachments_for_message(message_id: str) -> list:
+    # message attachments
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
         SELECT id, message_id, from_user_id, to_user_id, file_name, file_path,
-               file_type, file_size, timestamp, encrypted_aes_key, sender_encrypted_key, iv
+               file_type, file_size, timestamp, rsa_encrypted_aes_key_recipient, rsa_encrypted_aes_key_sender, iv
         FROM attachments WHERE message_id = ?
     ''', (message_id,))
     rows = cursor.fetchall()
@@ -562,10 +621,11 @@ def get_attachments_for_message(message_id: str) -> list:
     return [{
         "id": r[0], "message_id": r[1], "from_user_id": r[2], "to_user_id": r[3],
         "file_name": r[4], "file_path": r[5], "file_type": r[6], "file_size": r[7],
-        "timestamp": r[8], "encrypted_aes_key": r[9], "sender_encrypted_key": r[10], "iv": r[11]
+        "timestamp": r[8], "rsa_encrypted_aes_key_recipient": r[9], "rsa_encrypted_aes_key_sender": r[10], "iv": r[11]
     } for r in rows]
 
 def get_unread_count(user_id: str, from_user_id: str) -> int:
+    # unread count
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -577,19 +637,21 @@ def get_unread_count(user_id: str, from_user_id: str) -> int:
     return count
 
 def mark_messages_read(user_id: str, from_user_id: str):
+    # mark as read
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     now = datetime.now().isoformat()
-    # set read time if not set yet (needed for self-destruct timer)
     cursor.execute('''
-        UPDATE messages SET is_read = 1, status = 'read',
+        UPDATE messages SET is_read = 1, status = 'read', 
             read_at = CASE WHEN read_at IS NULL THEN ? ELSE read_at END
         WHERE recipient_id = ? AND sender_id = ?
+        AND (self_destruct_seconds = 0 OR id NOT IN (SELECT message_id FROM attachments WHERE file_type LIKE 'image/%'))
     ''', (now, user_id, from_user_id))
     conn.commit()
     conn.close()
 
 def update_message_status(message_id: str, status: str):
+    # update msg status
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -599,6 +661,7 @@ def update_message_status(message_id: str, status: str):
     conn.close()
 
 def get_last_message_between(user1_id: str, user2_id: str):
+    # last chat message
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -610,9 +673,9 @@ def get_last_message_between(user1_id: str, user2_id: str):
     conn.close()
     return row_to_message(row) if row else None
 
-# --- blocks ---
-
+# block funcs
 def block_user(blocker_id: str, blocked_id: str):
+    # block user
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
@@ -627,6 +690,7 @@ def block_user(blocker_id: str, blocked_id: str):
     conn.close()
 
 def unblock_user(blocker_id: str, blocked_id: str):
+    # unblock user
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -637,6 +701,7 @@ def unblock_user(blocker_id: str, blocked_id: str):
     print(f"[DATABASE] User {blocked_id} unblocked by {blocker_id}")
 
 def get_blocked_users(blocker_id: str) -> list:
+    # blocked users list
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -645,10 +710,12 @@ def get_blocked_users(blocker_id: str) -> list:
         WHERE b.blocker_id = ?
     ''', (blocker_id,))
     rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
     conn.close()
-    return [row_to_user(row) for row in rows]
+    return [row_to_user(row, columns) for row in rows]
 
 def is_blocked(user1_id: str, user2_id: str) -> bool:
+    # check if blocked
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -660,11 +727,11 @@ def is_blocked(user1_id: str, user2_id: str) -> bool:
     return count > 0
 
 def search_users_with_blocks(query: str, current_user_id: str) -> list:
-    # search users, exclude blocked
+    # search excluding blocked
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-
+    # Get all blocked user IDs (both directions)
     cursor.execute('''
         SELECT blocked_id FROM blocks WHERE blocker_id = ?
         UNION
@@ -673,7 +740,7 @@ def search_users_with_blocks(query: str, current_user_id: str) -> list:
     blocked_ids = [row[0] for row in cursor.fetchall()]
     blocked_ids.append(current_user_id)  # Exclude self
     
-
+    # Build placeholders
     placeholders = ','.join('?' * len(blocked_ids))
     
     if query:
@@ -694,11 +761,11 @@ def search_users_with_blocks(query: str, current_user_id: str) -> list:
     return [row_to_user(row, columns) for row in rows]
 
 def get_chat_users(current_user_id: str) -> list:
-    # list of users with message history, sorted by time
+    # active chats list
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-
+    # Get all unique users we've chatted with and their last message time
     cursor.execute('''
         SELECT DISTINCT 
             CASE 
@@ -716,7 +783,7 @@ def get_chat_users(current_user_id: str) -> list:
     rows = cursor.fetchall()
     conn.close()
     
-
+    # Get user details for each
     chat_users = []
     for row in rows:
         user = get_user_by_id(row[0])
@@ -725,9 +792,9 @@ def get_chat_users(current_user_id: str) -> list:
     
     return chat_users
 
-# --- media ---
-
+# media stuff
 def get_media_between(user1_id: str, user2_id: str) -> list:
+    # chat media files
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -742,10 +809,9 @@ def get_media_between(user1_id: str, user2_id: str) -> list:
              "file_name": r[4], "file_path": r[5], "file_type": r[6], "file_size": r[7], 
              "timestamp": r[8]} for r in rows]
 
-# --- chat clearing ---
-
+# clear chat
 def clear_chat_for_user(user_id: str, other_user_id: str):
-    # messages under 10 min deleted for both, older only for requester
+    # clear chat history
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -778,14 +844,14 @@ def clear_chat_for_user(user_id: str, other_user_id: str):
     print(f"[DATABASE] Chat cleared for user {user_id} with {other_user_id}")
 
 def delete_all_messages_between(user1_id: str, user2_id: str):
-    # permanently delete all messages (on block)
+    # delete all messages
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM messages 
         WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)
     ''', (user1_id, user2_id, user2_id, user1_id))
-    # delete attachments too
+    # Also delete attachments
     cursor.execute('''
         DELETE FROM attachments 
         WHERE (from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)
@@ -794,9 +860,9 @@ def delete_all_messages_between(user1_id: str, user2_id: str):
     conn.close()
     print(f"[DATABASE] All messages deleted between {user1_id} and {user2_id}")
 
-# --- online status ---
-
+# online status funcs
 def set_user_online(user_id: str, is_online: bool):
+    # set online status
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -806,6 +872,7 @@ def set_user_online(user_id: str, is_online: bool):
     conn.close()
 
 def get_user_online_status(user_id: str) -> dict:
+    # check online status
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT is_online, last_seen FROM users WHERE id = ?", (user_id,))
@@ -816,10 +883,51 @@ def get_user_online_status(user_id: str) -> dict:
         return {"is_online": bool(row[0]), "last_seen": row[1]}
     return {"is_online": False, "last_seen": None}
 
-# --- self destruct messages ---
+def update_user_preferences(user_id: str, language: str = None, theme: str = None):
+    # update preferences
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    if language:
+        cursor.execute("UPDATE users SET language = ? WHERE id = ?", (language, user_id))
+    if theme:
+        cursor.execute("UPDATE users SET theme = ? WHERE id = ?", (theme, user_id))
+        
+    # Sync settings JSON column
+    cursor.execute("SELECT settings FROM users WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    if row:
+        import json
+        settings = {}
+        if row[0]:
+            try:
+                settings = json.loads(row[0])
+            except:
+                pass
+        if language:
+            settings["language"] = language
+        if theme:
+            settings["theme"] = theme
+        cursor.execute("UPDATE users SET settings = ? WHERE id = ?", (json.dumps(settings), user_id))
+    
+    conn.commit()
+    conn.close()
 
+def get_user_preferences(user_id: str) -> dict:
+    # get preferences
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT language, theme FROM users WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return {"language": row[0] or "ru", "theme": row[1] or "dark"}
+    return {"language": "ru", "theme": "dark"}
+
+# self destruct funcs
 def get_expired_self_destruct_messages() -> list:
-    # find messages that were read and expired
+    # find expired sd messages
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -841,7 +949,7 @@ def get_expired_self_destruct_messages() -> list:
     return expired
 
 def delete_expired_messages():
-    # delete expired self-destruct messages
+    # delete expired sd messages
     expired = get_expired_self_destruct_messages()
     if not expired:
         return []
@@ -858,7 +966,7 @@ def delete_expired_messages():
     return expired
 
 def set_message_read_at(message_id: str, read_at: str = None):
-    # record the time photo was opened
+    # set read_at for timer
     if read_at is None:
         read_at = datetime.now().isoformat()
     conn = sqlite3.connect(DB_FILE)
@@ -871,7 +979,16 @@ def set_message_read_at(message_id: str, read_at: str = None):
     conn.close()
     return read_at
 
+def set_user_banned(user_id: str, is_banned: bool):
+    # ban/unban user globally
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET is_banned = ? WHERE id = ?", (1 if is_banned else 0, user_id))
+    conn.commit()
+    conn.close()
+
 def get_message_by_id(message_id: str):
+    # get msg by id
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM messages WHERE id = ?', (message_id,))
@@ -879,30 +996,18 @@ def get_message_by_id(message_id: str):
     conn.close()
     return row_to_message(row) if row else None
 
-def update_user_preferences(user_id: str, language: str = None, theme: str = None):
+def get_self_destruct_info(message_id: str) -> dict:
+    # get sd info
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    
-    if language:
-        cursor.execute("UPDATE users SET language = ? WHERE id = ?", (language, user_id))
-    if theme:
-        cursor.execute("UPDATE users SET theme = ? WHERE id = ?", (theme, user_id))
-    
-    conn.commit()
-    conn.close()
-
-def get_user_preferences(user_id: str) -> dict:
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT language, theme FROM users WHERE id = ?", (user_id,))
+    cursor.execute('SELECT self_destruct_seconds, read_at FROM messages WHERE id = ?', (message_id,))
     row = cursor.fetchone()
     conn.close()
-    
     if row:
-        return {"language": row[0] or "ru", "theme": row[1] or "dark"}
-    return {"language": "ru", "theme": "dark"}
+        return {"self_destruct_seconds": row[0] or 0, "read_at": row[1]}
+    return {"self_destruct_seconds": 0, "read_at": None}
 
-# compatibility
+# compat
 all_users = get_all_users()
 all_messages = []  # Loaded on demand
 

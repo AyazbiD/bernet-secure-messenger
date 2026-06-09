@@ -3,10 +3,10 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="description" content="Bernet Secure Messenger — безопасный мессенджер с шифрованием">
   <title>Bernet Messenger — Вход</title>
-  <link rel="stylesheet" href="/web/css/style.css?v=10">
+  <link rel="stylesheet" href="/web/css/style.css?v=14">
   <link rel="icon" href="/web/assets/logo.png" type="image/png">
 </head>
 
@@ -96,10 +96,54 @@
         <span data-i18n="auth_has_account">Уже есть аккаунт?</span> <a id="showLogin" data-i18n="auth_signin">Войти</a>
       </div>
     </div>
+
+    <!-- ── PIN SCREEN ── -->
+    <div class="pin-screen" id="pinScreen">
+      <div class="pin-card">
+        <div class="pin-logo">
+          <img src="/web/assets/logo.png" alt="Bernet" onerror="this.style.display='none'">
+        </div>
+        <div class="pin-title" id="pinTitle">Введите PIN-код</div>
+        <div class="pin-subtitle" id="pinSubtitle">PIN защищает ваш приватный ключ</div>
+
+        <div class="pin-dots" id="pinDots">
+          <div class="pin-dot" id="pinDot0"></div>
+          <div class="pin-dot" id="pinDot1"></div>
+          <div class="pin-dot" id="pinDot2"></div>
+          <div class="pin-dot" id="pinDot3"></div>
+        </div>
+
+        <div class="pin-error" id="pinError"></div>
+
+        <div class="numpad">
+          <div class="numpad-row">
+            <button class="numpad-btn" data-num="1">1</button>
+            <button class="numpad-btn" data-num="2">2</button>
+            <button class="numpad-btn" data-num="3">3</button>
+          </div>
+          <div class="numpad-row">
+            <button class="numpad-btn" data-num="4">4</button>
+            <button class="numpad-btn" data-num="5">5</button>
+            <button class="numpad-btn" data-num="6">6</button>
+          </div>
+          <div class="numpad-row">
+            <button class="numpad-btn" data-num="7">7</button>
+            <button class="numpad-btn" data-num="8">8</button>
+            <button class="numpad-btn" data-num="9">9</button>
+          </div>
+          <div class="numpad-row">
+            <button class="numpad-btn fn" id="pinBackspace">⌫</button>
+            <button class="numpad-btn" data-num="0">0</button>
+            <button class="numpad-btn fn" id="pinConfirm">✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="/web/js/i18n.js?v=10"></script>
   <script src="/web/js/api.js?v=10"></script>
+  <script src="/web/js/crypto.js?v=10"></script>
   <script src="/web/js/app.js?v=10"></script>
   <script>
     // Add auth-specific translations

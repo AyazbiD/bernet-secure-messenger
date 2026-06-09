@@ -3,11 +3,17 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="description" content="Bernet Secure Messenger — чаты">
     <title>Bernet Messenger</title>
-    <link rel="stylesheet" href="/web/css/style.css?v=11">
+    <link rel="stylesheet" href="/web/css/style.css?v=16">
     <link rel="icon" href="/web/assets/logo.png" type="image/png">
+    
+    <!-- Flatpickr (Calendar) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    
+    <!-- intl-tel-input (Phone number country codes) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.4/build/css/intlTelInput.css">
 </head>
 
 <body>
@@ -16,9 +22,8 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="search-box">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" data-i18n="search_placeholder"
-                        placeholder="Поиск пользователей..." autocomplete="new-password">
+                    <span class="search-icon"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
+                    <div id="searchInputUser" class="search-editable" contenteditable="true" data-placeholder="Поиск пользователей..." data-i18n-placeholder="search_placeholder"></div>
                     <div class="search-results" id="searchResults"></div>
                 </div>
             </div>
@@ -32,10 +37,15 @@
             <div class="sidebar-footer">
                 <div class="chat-avatar sm clickable" id="currentUserAvatar">?</div>
                 <span class="user-name clickable" id="currentUserName">...</span>
-                <button class="btn-icon" id="settingsBtn" data-i18n-title="settings_tooltip"
-                    title="Настройки безопасности">🔐</button>
-                <button class="btn-icon" id="logoutBtn" data-i18n-title="logout_tooltip" title="Выйти"
-                    style="color:var(--error);">🚪</button>
+                <button class="btn-icon hidden" id="adminPanelBtn" data-i18n-title="admin_panel_title" title="Панель администратора" onclick="Chat.openAdminPanel()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                </button>
+                <button class="btn-icon" id="settingsBtn" title="Настройки безопасности">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
+                <button class="btn-icon" id="logoutBtn" title="Выйти" style="color:var(--error);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                </button>
             </div>
         </aside>
 
@@ -58,17 +68,18 @@
                         <div class="name">—</div>
                         <div class="status" id="chatHeaderStatus"></div>
                     </div>
-                    <button class="btn-icon" id="chatMenuBtn" data-i18n-title="menu_tooltip" title="Меню">⋮</button>
+                    <button class="btn-icon" id="securityShieldBtn" style="color:var(--success); font-size:18px;" title="Окно безопасности E2E" onclick="Chat.showSecurityVerification()"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></button>
+                    <button class="btn-icon" id="chatMenuBtn" title="Меню"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
                 </div>
 
                 <!-- Chat Context Menu -->
                 <div class="context-menu" id="chatContextMenu">
-                    <div class="context-item" onclick="Chat.openOtherProfile()"><span data-i18n="ctx_profile">👤
+                    <div class="context-item" onclick="Chat.openOtherProfile()"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> <span data-i18n="ctx_profile">
                             Профиль</span></div>
-                    <div class="context-item" onclick="Chat.clearChat(Chat.currentChat?.id)"><span
-                            data-i18n="ctx_clear_chat">🗑️ Очистить чат</span></div>
-                    <div class="context-item danger" onclick="Chat.toggleBlock(Chat.currentChat?.id, false)"><span
-                            data-i18n="ctx_block">🚫
+                    <div class="context-item" onclick="Chat.clearChat(Chat.currentChat?.id)"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span
+                            data-i18n="ctx_clear_chat">Очистить чат</span></div>
+                    <div class="context-item danger" onclick="if(confirm(I18n.t('confirm_block'))) Chat.toggleBlock(Chat.currentChat?.id, false)"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg> <span
+                            data-i18n="ctx_block">
                             Заблокировать</span></div>
                 </div>
 
@@ -81,7 +92,7 @@
                     <div class="input-row">
                         <input type="file" id="fileInput" hidden multiple onchange="Chat.handleFileSelect(this)">
                         <button class="btn-icon" onclick="document.getElementById('fileInput').click()"
-                            data-i18n-title="attach_tooltip" title="Прикрепить файл">
+                            title="Прикрепить файл">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2">
                                 <path
@@ -89,9 +100,20 @@
                                 </path>
                             </svg>
                         </button>
+                        <div class="timer-dropdown">
+                            <button class="btn-icon" id="timerBtn" style="color: var(--text-secondary);" title="Таймер самоуничтожения" onclick="Chat.toggleTimerMenu(event)"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg></button>
+                            <div class="timer-menu hidden" id="timerMenu">
+                                <div class="timer-option active" data-val="0" onclick="Chat.setTimer(0, this)"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg> Выкл</div>
+                                <div class="timer-option" data-val="5" onclick="Chat.setTimer(5, this)">5 сек</div>
+                                <div class="timer-option" data-val="30" onclick="Chat.setTimer(30, this)">30 сек</div>
+                                <div class="timer-option" data-val="60" onclick="Chat.setTimer(60, this)">1 мин</div>
+                                <div class="timer-option" data-val="300" onclick="Chat.setTimer(300, this)">5 мин</div>
+                            </div>
+                            <input type="hidden" id="timerSelect" value="0">
+                        </div>
                         <textarea id="messageInput" data-i18n="type_message" placeholder="Напишите сообщение..."
                             rows="1"></textarea>
-                        <button class="send-btn" id="sendBtn" data-i18n-title="send_tooltip" title="Отправить">
+                        <button class="send-btn" id="sendBtn" title="Отправить">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -117,7 +139,7 @@
                 <div class="avatar-upload-wrapper" onclick="Chat.uploadAvatar()">
                     <div class="chat-avatar lg" id="profileAvatar"
                         onclick="event.stopPropagation(); Chat.viewAvatar(this)">?</div>
-                    <div class="avatar-overlay">📷</div>
+                    <div class="avatar-overlay"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></div>
                 </div>
                 <div class="profile-main">
                     <div class="profile-name" id="profileName">—</div>
@@ -127,9 +149,9 @@
 
             <!-- Tabs: Edit Profile | Blocked -->
             <div class="profile-tabs">
-                <button class="tab active" onclick="Chat.switchProfileTab(this, 'tabProfileEdit')">✏️
+                <button class="tab active" onclick="Chat.switchProfileTab(this, 'tabProfileEdit')"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                     <span data-i18n="edit_profile">Редактировать</span></button>
-                <button class="tab" onclick="Chat.switchProfileTab(this, 'tabBlocked')">🚫 <span
+                <button class="tab" onclick="Chat.switchProfileTab(this, 'tabBlocked')"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg> <span
                         data-i18n="blocked_list">Блокировки</span></button>
             </div>
 
@@ -146,18 +168,18 @@
                 </div>
                 <div class="input-group">
                     <label data-i18n="phone">Телефон</label>
-                    <input type="text" id="editPhone" placeholder="+7 (___) ___-__-__">
+                    <input type="text" id="editPhone">
                 </div>
                 <div class="input-group">
                     <label data-i18n="birth_date">Дата рождения</label>
-                    <input type="date" id="editBirth">
+                    <input type="text" id="editBirth">
                 </div>
                 <div class="input-group">
                     <label data-i18n="about_label">О себе</label>
                     <textarea id="editAbout" data-i18n="about_me" placeholder="Расскажите о себе..." rows="3"
-                        style="resize:vertical"></textarea>
+                        style="resize:none"></textarea>
                 </div>
-                <button class="btn btn-primary" onclick="Chat.saveProfile()">💾 <span
+                <button class="btn btn-primary" onclick="Chat.saveProfile()"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> <span
                         data-i18n="save">Сохранить</span></button>
             </div>
 
@@ -189,23 +211,57 @@
             </div>
 
             <div class="profile-info">
-                <div class="info-row"><span class="info-label" data-i18n="phone_label">📱 Телефон</span><span
-                        id="otherProfilePhone">—</span>
+                <div class="info-row"><span class="info-label" data-i18n="phone"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg> Телефон</span><span id="otherProfilePhone">—</span>
                 </div>
-                <div class="info-row"><span class="info-label" data-i18n="birth_label">🎂 Дата рождения</span><span
+                <div class="info-row"><span class="info-label" data-i18n="birth_date"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1" ry="1"></rect><path d="M12 8v13"></path><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"></path></svg> Дата рождения</span><span
                         id="otherProfileBirth">—</span></div>
-                <div class="info-row"><span class="info-label" data-i18n="about_info_label">📝 О себе</span><span
-                        id="otherProfileAbout">—</span>
+                <div class="info-row"><span class="info-label" data-i18n="about_label"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> О себе</span><span id="otherProfileAbout">—</span>
+                </div>
+                <hr style="border-color: var(--border); margin: 10px 0;">
+                <div class="info-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                    <span class="info-label" data-i18n="pubkey_fingerprint" style="margin-bottom: 4px;"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Отпечаток ключа (E2E)</span>
+                    <span id="otherProfileFingerprint" style="font-family: monospace; font-size: 11px; color: var(--accent); white-space: normal; word-break: break-all;">—</span>
                 </div>
             </div>
 
             <div class="profile-actions">
-                <button class="btn btn-primary" id="otherProfileWriteBtn">✉️ <span
+                <button class="btn btn-primary" id="otherProfileWriteBtn"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> <span
                         data-i18n="send_message">Написать</span></button>
-                <button class="btn btn-outline" id="otherProfileBlockBtn">🚫 <span
+                <button class="btn btn-outline" id="otherProfileBlockBtn"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg> <span
                         data-i18n="block_user">Заблокировать</span></button>
-                <button class="btn btn-outline danger" id="otherProfileClearBtn">🗑️ <span
+                <button class="btn btn-outline danger" id="otherProfileClearBtn"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> <span
                         data-i18n="ctx_clear_chat">Очистить чат</span></button>
+                <button class="btn btn-outline danger hidden" id="otherProfileAdminBanBtn" style="width:100%; margin-top:8px; border-color:red; color:red; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="Chat.adminToggleBan()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5"></path><path d="M14 11V4a2 2 0 0 0-4 0v7"></path><path d="M10 11V3a2 2 0 0 0-4 0v8"></path><path d="M6 11V7a2 2 0 0 0-4 0v9a8 8 0 0 0 16 0v-5a2 2 0 0 0-4 0"></path></svg>
+                    <span data-i18n="admin_ban">Глобальный Бан (Админ)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ SECURITY VERIFICATION MODAL ═══════════════ -->
+    <div class="modal-overlay hidden" id="securityVerificationModal">
+        <div class="modal animate-scale">
+            <div class="modal-header">
+                <h2><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> <span data-i18n="security_verification">Безопасность</span></h2>
+                <button class="btn-icon" onclick="document.getElementById('securityVerificationModal').classList.add('hidden')">✕</button>
+            </div>
+            <div class="profile-info" style="text-align: center; max-width: 350px; margin: 0 auto; padding: 20px;">
+                <h3 style="color:var(--success); margin: 0 0 5px 0;" data-i18n="e2e_encryption">Сквозное шифрование</h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 0;" data-i18n="auto_message_protection">Автоматическая защита сообщений</p>
+                
+                <hr style="border-color: var(--border); margin: 15px 0;">
+                
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 5px;" data-i18n="your_key_fingerprint">Ваш отпечаток ключа:</p>
+                <div id="secMyFingerprint" style="background: var(--bg-tertiary); padding: 10px; border-radius: 8px; font-family: monospace; font-size: 12px; color: var(--accent); word-break: break-all; margin-bottom: 15px;">—</div>
+                
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 5px;" data-i18n="peer_key_fingerprint">Отпечаток собеседника:</p>
+                <div id="secTheirFingerprint" style="background: var(--bg-tertiary); padding: 10px; border-radius: 8px; font-family: monospace; font-size: 12px; color: var(--warning); word-break: break-all; margin-bottom: 20px;">—</div>
+                
+                <p style="font-size: 12px; color: var(--text-muted);" data-i18n="compare_fingerprints">Сравните отпечатки лично. Совпадение отпечатков означает, что связь зашифрована сквозным методом от устройства к устройству и никто (даже сервер) не может их прочитать.</p>
+            </div>
+            <div style="padding: 15px; text-align: center; border-top: 1px solid var(--border);">
+                <button class="btn btn-primary" onclick="document.getElementById('securityVerificationModal').classList.add('hidden')" data-i18n="understood">Понятно</button>
             </div>
         </div>
     </div>
@@ -214,17 +270,17 @@
     <div class="modal-overlay hidden" id="settingsModal">
         <div class="modal modal-settings animate-scale">
             <div class="modal-header">
-                <h2>⚙️ <span data-i18n="settings_title">Настройки</span></h2>
+                <h2><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> <span data-i18n="settings_title">Настройки</span></h2>
                 <button class="btn-icon"
                     onclick="document.getElementById('settingsModal').classList.add('hidden')">✕</button>
             </div>
 
             <!-- Tabs -->
             <div class="settings-tabs">
-                <button class="tab active" id="btnTabAppearance">🎨 <span
+                <button class="tab active" id="btnTabAppearance"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg> <span
                         data-i18n="appearance_tab">Оформление</span></button>
-                <button class="tab" id="btnTabPassword">🔐 <span data-i18n="password_tab">Пароль</span></button>
-                <button class="tab" id="btnTabPrivacy">🛡️ <span
+                <button class="tab" id="btnTabPassword"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> <span data-i18n="password_tab">Пароль</span></button>
+                <button class="tab" id="btnTabPrivacy"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> <span
                         data-i18n="privacy_tab">Конфиденциальность</span></button>
             </div>
 
@@ -234,10 +290,10 @@
                     <h3 class="settings-section-title" data-i18n="theme">Тема</h3>
                     <div class="theme-toggle-group">
                         <button class="theme-btn active" id="btnThemeDark" onclick="Chat.setTheme('dark')">
-                            🌙 <span data-i18n="theme_dark">Тёмная</span>
+                            <svg class="icon" style="color: #a29bfe;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg> <span data-i18n="theme_dark">Тёмная</span>
                         </button>
                         <button class="theme-btn" id="btnThemeLight" onclick="Chat.setTheme('light')">
-                            ☀️ <span data-i18n="theme_light">Светлая</span>
+                            <svg class="icon" style="color: #f39c12;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg> <span data-i18n="theme_light">Светлая</span>
                         </button>
                     </div>
                 </div>
@@ -261,60 +317,56 @@
             <div class="tab-content hidden" id="tabPassword">
                 <div class="input-group">
                     <label data-i18n="old_password">Старый пароль</label>
-                    <input type="password" id="oldPassword" data-i18n="old_password_placeholder"
-                        placeholder="Текущий пароль">
+                    <input type="password" id="oldPassword" data-i18n="current_password_placeholder" placeholder="Текущий пароль">
                 </div>
                 <div class="input-group">
                     <label data-i18n="new_password">Новый пароль</label>
-                    <input type="password" id="newPassword" data-i18n="new_password_placeholder"
-                        placeholder="Минимум 4 символа">
+                    <input type="password" id="newPassword" data-i18n="password_hint" placeholder="Минимум 4 символа">
                 </div>
-                <button class="btn btn-primary" onclick="Chat.changePassword()">🔐 <span
-                        data-i18n="change_password_btn">Сменить пароль</span></button>
+                <button class="btn btn-primary" onclick="Chat.changePassword()"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> <span data-i18n="change_password_btn">Сменить пароль</span></button>
             </div>
 
             <!-- Tab: Privacy / Keys -->
             <div class="tab-content hidden" id="tabPrivacy">
                 <div class="key-status-card" id="keyStatusCard">
                     <div class="key-status-header">
-                        <span class="key-icon" id="keyStatusIcon">🔑</span>
+                        <span class="key-icon" id="keyStatusIcon"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg></span>
                         <div>
-                            <div class="key-status-title" id="keyStatusTitle" data-i18n="encryption_keys">Ключи
-                                шифрования</div>
+                            <div class="key-status-title" id="keyStatusTitle" data-i18n="encryption_keys">Ключи шифрования</div>
                             <div class="key-status-sub" id="keyStatusSub" data-i18n="checking">Проверка...</div>
                         </div>
                     </div>
                 </div>
 
                 <div class="key-info-section">
-                    <label class="key-label" data-i18n="key_fingerprint">Отпечаток публичного ключа</label>
+                    <label class="key-label" data-i18n="pubkey_fingerprint">Отпечаток публичного ключа</label>
                     <div class="key-fingerprint" id="keyFingerprint">—</div>
                 </div>
 
                 <div class="key-info-section">
-                    <label class="key-label" data-i18n="public_key_pem">Публичный ключ (PEM)</label>
+                    <label class="key-label" data-i18n="pubkey_pem">Публичный ключ (PEM)</label>
                     <textarea class="key-pem-display" id="keyPublicPem" readonly rows="4" data-i18n="no_key"
                         placeholder="Нет ключа"></textarea>
-                    <button class="btn btn-sm btn-outline" onclick="Chat.copyPublicKey()" style="margin-top:8px;">📋
+                    <button class="btn btn-sm btn-outline" onclick="Chat.copyPublicKey()" style="margin-top:8px;"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
                         <span data-i18n="copy_btn">Копировать</span></button>
                 </div>
 
                 <div class="key-info-section">
-                    <label class="key-label" data-i18n="private_key">Приватный ключ</label>
+                    <label class="key-label" data-i18n="private_key_label">Приватный ключ</label>
                     <div class="key-private-status" id="keyPrivateStatus">—</div>
                 </div>
 
                 <div class="key-actions">
-                    <button class="btn btn-primary" onclick="Chat.regenerateKeys()">🔄 <span
-                            data-i18n="regen_keys_btn">Обновить ключи</span></button>
-                    <p class="key-warning" data-i18n="regen_warning">⚠️ При обновлении старые зашифрованные сообщения
-                        станут нечитаемыми</p>
+                    <button class="btn btn-primary" onclick="Chat.regenerateKeys()"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> <span data-i18n="regen_keys">Обновить ключи</span></button>
+                    <p class="key-warning" data-i18n="regen_warning"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> При обновлении старые зашифрованные сообщения станут нечитаемыми</p>
                 </div>
             </div>
 
             <div class="settings-footer">
-                <button class="btn btn-outline danger" onclick="Chat.logout()">🚪 <span data-i18n="logout_btn">Выйти из
-                        аккаунта</span></button>
+                <button class="btn btn-outline danger" style="display:flex; align-items:center; justify-content:center; gap:8px;" onclick="Chat.logout()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    <span data-i18n="logout">Выйти</span>
+                </button>
             </div>
         </div>
     </div>
@@ -325,20 +377,56 @@
             <img id="imageViewerImg" src="" alt="">
             <div class="viewer-controls">
                 <button class="btn-icon viewer-btn" id="viewerDownloadBtn" onclick="Chat.downloadViewerImage()"
-                    data-i18n-title="download_tooltip" title="Скачать">⬇️</button>
+                    title="Скачать"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button>
                 <button class="btn-icon viewer-btn"
                     onclick="document.getElementById('imageViewerModal').classList.add('hidden')"
-                    data-i18n-title="close_tooltip" title="Закрыть">✕</button>
+                    title="Закрыть">✕</button>
             </div>
         </div>
     </div>
 
-    <script src="/web/js/i18n.js?v=21"></script>
-    <script src="/web/js/api.js?v=21"></script>
-    <script src="/web/js/ws.js?v=21"></script>
-    <script src="/web/js/crypto.js?v=21"></script>
-    <script src="/web/js/chat.js?v=21"></script>
-    <script src="/web/js/app.js?v=21"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
+    <!-- 👑 ADMIN PANEL MODAL 👑 -->
+    <div class="modal-overlay hidden" id="adminModal">
+        <div class="modal animate-scale" style="max-width: 800px; width: 90%; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2>
+                    <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    <span data-i18n="admin_panel_title">Панель администратора</span>
+                </h2>
+                <button class="btn-icon" onclick="document.getElementById('adminModal').classList.add('hidden')">✕</button>
+            </div>
+            
+            <div class="modal-body" style="overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <div style="display: flex; align-items: center; gap: 10px; background: var(--bg-hover); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="adminSearchInput" data-i18n-placeholder="admin_search_placeholder" placeholder="Поиск пользователей..." style="border: none; background: transparent; outline: none; flex-grow: 1; color: var(--text-main);" oninput="Chat.adminSearch(this.value)">
+                </div>
+
+                <div class="admin-users-list" id="adminUsersList" style="display: flex; flex-direction: column; gap: 10px; min-height: 200px;">
+                    <!-- Users will be loaded here -->
+                    <div style="text-align: center; color: var(--text-muted);">Загрузка пользователей...</div>
+                </div>
+
+                <div id="adminPagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 15px; border-top: 1px solid var(--border); display: none;">
+                    <button class="btn btn-outline" id="adminPrevBtn" onclick="Chat.adminChangePage(-1)" style="padding: 6px 12px; font-size: 0.85rem;" data-i18n="admin_page_prev">Назад</button>
+                    <span id="adminPageInfo" style="font-size: 0.9rem; color: var(--text-muted);"></span>
+                    <button class="btn btn-outline" id="adminNextBtn" onclick="Chat.adminChangePage(1)" style="padding: 6px 12px; font-size: 0.85rem;" data-i18n="admin_page_next">Вперед</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.4/build/js/intlTelInput.min.js"></script>
+
+    <script src="/web/js/i18n.js?v=16"></script>
+    <script src="/web/js/api.js?v=9"></script>
+    <script src="/web/js/ws.js?v=9"></script>
+    <script src="/web/js/crypto.js?v=9"></script>
+    <script src="/web/js/chat.js?v=16"></script>
+    <script src="/web/js/app.js?v=9"></script>
 </body>
 
 </html>

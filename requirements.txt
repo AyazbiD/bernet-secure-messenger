@@ -1,5 +1,8 @@
-# Bernet Secure Messenger — Dependencies
+# Bernet Secure Messenger - Dependencies
 # Install: pip install -r requirements.txt
+
+# UI Framework
+flet>=0.25.0
 
 # Backend Server
 fastapi>=0.104.0
@@ -16,3 +19,9 @@ cryptography>=41.0.0
 
 # API Client
 requests>=2.31.0
+
+# AI Support (optional)
+google-genai>=1.0.0
+
+# Deployment
+pyngrok>=7.0.0

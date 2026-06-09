@@ -1,4 +1,4 @@
-// websocket client - real-time messaging
+// bernet websocket client
 class BernetWS {
     constructor() {
         this.ws = null;
@@ -12,6 +12,7 @@ class BernetWS {
         this.onMessage = null;       // (message) => {}
         this.onStatusUpdate = null;  // (userId, isOnline) => {}
         this.onTyping = null;        // (userId, isTyping) => {}
+        this.onUserUpdate = null;    // (userId, updates) => {}
         this.onConnect = null;       // () => {}
         this.onDisconnect = null;    // () => {}
     }
@@ -74,6 +75,18 @@ class BernetWS {
             case 'typing':
                 if (this.onTyping) this.onTyping(data.user_id, data.is_typing);
                 break;
+            case 'user_update':
+                if (this.onUserUpdate) this.onUserUpdate(data.user_id, data.updates);
+                break;
+            case 'messages_read':
+                if (this.onMessagesRead) this.onMessagesRead(data.reader_id);
+                break;
+            case 'sd_started':
+                if (this.onSdStarted) this.onSdStarted(data);
+                break;
+            case 'message_deleted':
+                if (this.onMessageDeleted) this.onMessageDeleted(data.message_id);
+                break;
             case 'heartbeat_ack':
                 break;
             default:
@@ -91,9 +104,9 @@ class BernetWS {
         this.send({
             type: 'message',
             recipient_id: recipientId,
-            encrypted_content: content,
-            encrypted_aes_key: '',
-            sender_encrypted_key: '',
+            aes_encrypted_content: content,
+            rsa_encrypted_aes_key_recipient: '',
+            rsa_encrypted_aes_key_sender: '',
             iv: ''
         });
     }
@@ -137,7 +150,7 @@ class BernetWS {
             this.reconnectTimer = null;
         }
         if (this.ws) {
-            this.ws.onclose = null; // Prevent reconnect
+            this.ws.onclose = null; // prevent reconnect
             this.ws.close();
             this.ws = null;
         }
@@ -145,5 +158,5 @@ class BernetWS {
     }
 }
 
-
+// global instance
 const ws = new BernetWS();

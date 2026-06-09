@@ -1,4 +1,4 @@
-// api client
+// bernet api client
 class BernetAPI {
     constructor(baseUrl = '') {
         this.baseUrl = baseUrl;
@@ -85,15 +85,20 @@ class BernetAPI {
     async getChats() { return this.request('GET', '/api/chats'); }
 
     // messages
-    async getMessages(otherUserId) { return this.request('GET', `/api/messages/${otherUserId}`); }
-    async sendMessage(recipientId, encryptedContent, encryptedAesKey = '', senderEncryptedKey = '', iv = '', attachmentIds = []) {
+    async getMessages(otherUserId, limit = 15, beforeId = '') { 
+        let url = `/api/messages/${otherUserId}?limit=${limit}`;
+        if (beforeId) url += `&before_id=${beforeId}`;
+        return this.request('GET', url); 
+    }
+    async sendMessage(recipientId, encryptedContent, encryptedAesKey = '', senderEncryptedKey = '', iv = '', attachmentIds = [], selfDestructSeconds = 0) {
         return this.request('POST', '/api/messages/send', {
             recipient_id: recipientId,
-            encrypted_content: encryptedContent,
-            encrypted_aes_key: encryptedAesKey,
-            sender_encrypted_key: senderEncryptedKey,
+            aes_encrypted_content: encryptedContent,
+            rsa_encrypted_aes_key_recipient: encryptedAesKey,
+            rsa_encrypted_aes_key_sender: senderEncryptedKey,
             iv: iv,
-            attachment_ids: attachmentIds
+            attachment_ids: attachmentIds,
+            self_destruct_seconds: selfDestructSeconds
         });
     }
 
@@ -138,6 +143,14 @@ class BernetAPI {
     async getStatus(userId) { return this.request('GET', `/api/status/${userId}`); }
     async health() { return this.request('GET', '/api/health'); }
 
+    // admin
+    async adminBan(userId, action = 'ban') { return this.request('POST', `/api/admin/ban/${userId}?action=${action}`); }
+    async getAdminUsers(query = '', page = 1, limit = 50) { 
+        const params = new URLSearchParams({ query, page, limit });
+        return this.request('GET', `/api/admin/users?${params.toString()}`); 
+    }
+    async adminUpdateRole(userId, role) { return this.request('PUT', `/api/admin/users/${userId}/role?role=${role}`); }
+
     // avatar
     async uploadAvatar(file) {
         const form = new FormData();
@@ -153,6 +166,6 @@ class BernetAPI {
     }
 }
 
-
+// global instance
 const api = new BernetAPI();
 window.api = api;
